@@ -11,10 +11,23 @@ The page is built like a cheap surveillance grid: channel list, REC, scanlines, 
 ## Screenshots
 
 
-```markdown
-![Live feed](docs/images/feed.png)
-![Placed camera](docs/images/placed-camera.png)
-```
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/feed.png" width="95%" alt="Live feed" />
+      <br />
+      <b>Live Feed</b>
+      <p>The web browser interface showing the real-time video stream from the active camera.</p>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/placed-camera.png" width="95%" alt="Placed camera" />
+      <br />
+      <b>Placed Camera</b>
+      <p>The physical security camera block placed and set up within the Minecraft world.</p>
+    </td>
+  </tr>
+</table>
+
 
 
 
