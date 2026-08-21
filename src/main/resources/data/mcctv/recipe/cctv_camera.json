@@ -1,0 +1,26 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "redstone",
+	"pattern": [
+		" I ",
+		"IGI",
+		" R "
+	],
+	"key": {
+		"I": "minecraft:iron_ingot",
+		"G": "minecraft:glass_pane",
+		"R": "minecraft:redstone"
+	},
+	"result": {
+		"id": "minecraft:player_head",
+		"count": 1,
+		"components": {
+			"minecraft:item_name": "CCTV Camera",
+			"minecraft:profile": {
+				"id": [-943208505, -901887488, -2147483648, 51137],
+				"name": "MCCTV",
+				"texture": "mcctv:entity/camera"
+			}
+		}
+	}
+}

@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "mcctv",
+	"version": "${version}",
+	"name": "MCCTV",
+	"description": "Place CCTV cameras and watch a live first-person feed of your base from a webpage.",
+	"authors": ["MCCTV"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["com.mcctv.McCctv"]
+	},
+	"mixins": ["mcctv.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

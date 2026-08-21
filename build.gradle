@@ -1,0 +1,177 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+}
+
+loom {
+	mods {
+		"mcctv" {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+def vanillaJarTree = fileTree("${project.projectDir}/.gradle/loom-cache/minecraftMaven") {
+	include "**/minecraft-merged*.jar"
+	exclude "**/*.backup"
+}
+
+tasks.register("copyVanillaTextures") {
+	inputs.files(vanillaJarTree)
+	def outDir = layout.buildDirectory.dir("generated/vanilla-textures")
+	outputs.dir(outDir)
+	doLast {
+		def jar = vanillaJarTree.files.find { it.name.endsWith(".jar") }
+		if (jar == null) {
+			throw new GradleException("Could not find loom minecraft-merged jar to copy vanilla textures")
+		}
+		def root = outDir.get().asFile
+		delete root
+		def blockDir = new File(root, "assets/mcctv/vanilla/block")
+		def itemDir = new File(root, "assets/mcctv/vanilla/item")
+		def blockstateDir = new File(root, "assets/mcctv/vanilla/blockstates")
+		def modelDir = new File(root, "assets/mcctv/vanilla/models")
+		def bedDir = new File(root, "assets/mcctv/vanilla/entity/bed")
+		def chestDir = new File(root, "assets/mcctv/vanilla/entity/chest")
+		def humanoidDir = new File(root, "assets/mcctv/vanilla/entity/equipment/humanoid")
+		def leggingsDir = new File(root, "assets/mcctv/vanilla/entity/equipment/humanoid_leggings")
+		[blockDir, itemDir, blockstateDir, modelDir, bedDir, chestDir, humanoidDir, leggingsDir].each { it.mkdirs() }
+		def blockNames = []
+		def itemNames = []
+		def blockstateNames = []
+		def modelNames = []
+		def bedNames = []
+		def chestNames = []
+		def humanoidNames = []
+		def leggingsNames = []
+		def zip = new java.util.zip.ZipFile(jar)
+		try {
+			zip.entries().each { entry ->
+				def path = entry.name
+				if (path.startsWith("assets/minecraft/textures/block/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/block/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(blockDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						blockNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/textures/item/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/item/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(itemDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						itemNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/blockstates/") && path.endsWith(".json")) {
+					def key = path.substring("assets/minecraft/blockstates/".length(), path.length() - 5)
+					if (!key.contains("/")) {
+						new File(blockstateDir, key + ".json").withOutputStream { out -> out << zip.getInputStream(entry) }
+						blockstateNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/models/block/") && path.endsWith(".json")) {
+					def key = path.substring("assets/minecraft/models/block/".length(), path.length() - 5)
+					def dest = new File(modelDir, key + ".json")
+					dest.parentFile.mkdirs()
+					dest.withOutputStream { out -> out << zip.getInputStream(entry) }
+					modelNames << key
+				} else if (path.startsWith("assets/minecraft/textures/entity/bed/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/entity/bed/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(bedDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						bedNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/textures/entity/chest/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/entity/chest/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(chestDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						chestNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/textures/entity/equipment/humanoid/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/entity/equipment/humanoid/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(humanoidDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						humanoidNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/textures/entity/equipment/humanoid_leggings/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/entity/equipment/humanoid_leggings/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(leggingsDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						leggingsNames << key
+					}
+				} else if (path.startsWith("assets/minecraft/textures/models/armor/") && path.endsWith(".png")) {
+					def file = path.substring("assets/minecraft/textures/models/armor/".length(), path.length() - 4)
+					if (file.endsWith("_layer_1") || file.endsWith("_layer_2")) {
+						def layer = file.endsWith("_layer_1") ? 1 : 2
+						def mat = file.substring(0, file.length() - 8)
+						if (mat == "golden") mat = "gold"
+						if (mat == "turtle") mat = "turtle_scute"
+						def destDir = layer == 1 ? humanoidDir : leggingsDir
+						def destNames = layer == 1 ? humanoidNames : leggingsNames
+						def dest = new File(destDir, mat + ".png")
+						if (!dest.exists()) {
+							dest.withOutputStream { out -> out << zip.getInputStream(entry) }
+							destNames << mat
+						}
+					}
+				} else if (path == "assets/minecraft/textures/entity/player/wide/steve.png") {
+					new File(root, "assets/mcctv/vanilla/steve.png").withOutputStream { out -> out << zip.getInputStream(entry) }
+				}
+			}
+		} finally {
+			zip.close()
+		}
+		new File(root, "assets/mcctv/vanilla/block-index.txt").text = blockNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/item-index.txt").text = itemNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/blockstates-index.txt").text = blockstateNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/models-index.txt").text = modelNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/entity-bed-index.txt").text = bedNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/entity-chest-index.txt").text = chestNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/humanoid-index.txt").text = humanoidNames.sort().unique().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/humanoid-leggings-index.txt").text = leggingsNames.sort().unique().join("\n") + "\n"
+		logger.lifecycle("Copied ${blockNames.size()} block, ${itemNames.size()} item, ${blockstateNames.size()} blockstates, ${modelNames.size()} models, ${bedNames.size()} beds, ${humanoidNames.size()} armor")
+	}
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+
+	dependsOn "copyVanillaTextures"
+	from(layout.buildDirectory.dir("generated/vanilla-textures"))
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = "UTF-8"
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.archives_base_name}" }
+	}
+}

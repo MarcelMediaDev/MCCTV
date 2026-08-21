@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MCCTV</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	<aside>
+		<header class="brand">
+			<div class="brand-mark">MC</div>
+			<div>
+				<div class="brand-name">MCCTV</div>
+				<div class="brand-sub">Surveillance grid</div>
+			</div>
+		</header>
+		<div id="status" class="status-pill" data-state="boot">Connecting…</div>
+		<div class="section-label">Channels</div>
+		<nav id="cameras"></nav>
+		<footer class="aside-foot">
+			<span>Token session</span>
+			<span id="cam-count">0 CH</span>
+		</footer>
+	</aside>
+	<main>
+		<canvas id="view"></canvas>
+		<div class="feed-fx" aria-hidden="true">
+			<div class="vignette"></div>
+			<div class="scanlines"></div>
+			<div class="corners"><i></i><i></i><i></i><i></i></div>
+		</div>
+		<div id="overlay" class="hud">
+			<div class="hud-top">
+				<div class="hud-left">
+					<span id="rec" class="rec">REC</span>
+					<span id="cam-name">No camera</span>
+				</div>
+				<div class="hud-right">
+					<span id="clock">00:00:00Z</span>
+					<span id="cam-channel">CAM --</span>
+				</div>
+			</div>
+			<div class="hud-bottom">
+				<div id="cam-meta">NO SIGNAL</div>
+				<div id="cam-coords"></div>
+			</div>
+		</div>
+		<div id="nametags"></div>
+		<div id="nosignal" class="nosignal">NO SIGNAL</div>
+	</main>
+	<script src="/app.js"></script>
+</body>
+</html>

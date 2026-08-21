@@ -1,0 +1,15 @@
+{
+	"required": true,
+	"package": "com.mcctv.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"BlockItemMixin",
+		"ServerWorldMixin"
+	],
+	"server": [
+		"DecoderHandlerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
