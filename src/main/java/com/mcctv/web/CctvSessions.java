@@ -487,6 +487,20 @@ public class CctvSessions {
 					assignTntTiles(book, el.getAsJsonObject());
 				}
 			}
+			if (payload.has("frames")) {
+				for (var el : payload.getAsJsonArray("frames")) {
+					JsonObject frame = el.getAsJsonObject();
+					assignTile(book, frame);
+					int frameTile = ChunkMesher.lookupTile(book, frame.has("frame") ? frame.get("frame").getAsString() : "item_frame");
+					if (frameTile >= 0) {
+						frame.addProperty("frameTile", frameTile);
+					}
+					int woodTile = ChunkMesher.lookupTile(book, "birch_planks");
+					if (woodTile >= 0) {
+						frame.addProperty("woodTile", woodTile);
+					}
+				}
+			}
 			if (payload.has("players")) {
 				for (var el : payload.getAsJsonArray("players")) {
 					JsonObject player = el.getAsJsonObject();
