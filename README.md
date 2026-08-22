@@ -22,9 +22,22 @@ Nobody joining the server installs the mod. The reconstruction happens on the se
 ## Screenshots
 
 
-|                                                                                   |                                                                                      |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Live Feed**Live view from a camera. Not a video file, not a client screenshot. | **Placed Camera**A placed camera in the world. Vanilla clients do not need the mod. |
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/feed.png" width="95%" alt="Live feed" />
+      <br />
+      <b>Live Feed</b>
+      <p>Live view from a camera. Not a video file, not a client screenshot.</p>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/placed-camera.png" width="95%" alt="Placed camera" />
+      <br />
+      <b>Placed Camera</b>
+      <p>A placed camera in the world. Vanilla clients do not need the mod.</p>
+    </td>
+  </tr>
+</table>
 
 
 ---
