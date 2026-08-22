@@ -11,6 +11,7 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
+import net.minecraft.entity.decoration.ItemFrameEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.ItemStack;
@@ -21,6 +22,7 @@ import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.HashMap;
@@ -94,9 +96,37 @@ public final class EntitySampler {
 		root.add("mobs", mobs);
 		root.add("items", sampleItems(world, camera, eye, look, range));
 		root.add("tnt", sampleTnt(world, camera, eye, look, range));
+		root.add("frames", sampleFrames(world, camera, eye, look, range));
 		root.addProperty("count", entities.size());
 		SkyAppearance.capture(world, eye.x, eye.y, eye.z, config.viewDistance).writeJson(root);
 		return root;
+	}
+
+	private static JsonArray sampleFrames(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {
+		JsonArray frames = new JsonArray();
+		Box box = new Box(eye, eye).expand(range);
+		List<ItemFrameEntity> found = world.getEntitiesByClass(ItemFrameEntity.class, box,
+				entity -> inView(eye, look, entity.getX(), entity.getY(), entity.getZ(), range));
+		for (ItemFrameEntity entity : found) {
+			JsonObject json = new JsonObject();
+			json.addProperty("uuid", entity.getUuidAsString());
+			json.addProperty("x", entity.getX());
+			json.addProperty("y", entity.getY());
+			json.addProperty("z", entity.getZ());
+			Direction facing = entity.getHorizontalFacing();
+			json.addProperty("facing", facing.getId());
+			json.addProperty("rotation", entity.getRotation());
+			String type = Registries.ENTITY_TYPE.getId(entity.getType()).getPath();
+			json.addProperty("glow", type.contains("glow"));
+			json.addProperty("frame", type.contains("glow") ? "glow_item_frame" : "item_frame");
+			ItemStack stack = entity.getHeldItemStack();
+			JsonObject held = stackJson(world, stack);
+			for (var entry : held.entrySet()) {
+				json.add(entry.getKey(), entry.getValue());
+			}
+			frames.add(json);
+		}
+		return frames;
 	}
 
 	private static JsonArray sampleTnt(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {

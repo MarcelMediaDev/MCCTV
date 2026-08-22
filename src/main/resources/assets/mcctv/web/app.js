@@ -299,6 +299,7 @@ function tickPoses(dt) {
 	const playersOut = [];
 	const mobsOut = [];
 	const tntOut = [];
+	const framesOut = [];
 	for (const st of poses.values()) {
 		const t = st.dur ? Math.min(1, (now - st.t0) / st.dur) : 1;
 		const s = t * t * (3 - 2 * t);
@@ -328,8 +329,9 @@ function tickPoses(dt) {
 		if (st.kind === "player") playersOut.push(st);
 		else if (st.kind === "mob") mobsOut.push(st);
 		else if (st.kind === "tnt") tntOut.push(st);
+		else if (st.kind === "frame") framesOut.push(st);
 	}
-	return { players: playersOut, mobs: mobsOut, tnt: tntOut };
+	return { players: playersOut, mobs: mobsOut, tnt: tntOut, frames: framesOut };
 }
 
 function parseMesh(bytes) {
@@ -1192,6 +1194,82 @@ function drawTntCube(list, x, y, z, size, tileSide, tileTop, tileBottom, flash, 
 	}
 }
 
+function frameAxes(facing) {
+	switch (facing) {
+		case 0: return { n: [0, -1, 0], r: [1, 0, 0], u: [0, 0, 1] };
+		case 1: return { n: [0, 1, 0], r: [1, 0, 0], u: [0, 0, -1] };
+		case 3: return { n: [0, 0, 1], r: [1, 0, 0], u: [0, 1, 0] };
+		case 4: return { n: [-1, 0, 0], r: [0, 0, 1], u: [0, 1, 0] };
+		case 5: return { n: [1, 0, 0], r: [0, 0, -1], u: [0, 1, 0] };
+		default: return { n: [0, 0, -1], r: [-1, 0, 0], u: [0, 1, 0] };
+	}
+}
+
+function framePoint(origin, axes, x, y, z) {
+	return [
+		origin[0] + axes.r[0] * x + axes.u[0] * y + axes.n[0] * z,
+		origin[1] + axes.r[1] * x + axes.u[1] * y + axes.n[1] * z,
+		origin[2] + axes.r[2] * x + axes.u[2] * y + axes.n[2] * z
+	];
+}
+
+function rotateFrameAxes(axes, turns) {
+	const a = (turns || 0) * Math.PI / 4;
+	const c = Math.cos(a), s = Math.sin(a);
+	return {
+		n: axes.n,
+		r: [
+			axes.r[0] * c + axes.u[0] * s,
+			axes.r[1] * c + axes.u[1] * s,
+			axes.r[2] * c + axes.u[2] * s
+		],
+		u: [
+			axes.u[0] * c - axes.r[0] * s,
+			axes.u[1] * c - axes.r[1] * s,
+			axes.u[2] * c - axes.r[2] * s
+		]
+	};
+}
+
+function drawFrameQuad(list, origin, axes, corners, su0, sv0, su1, sv1, cr, cg, cb, tile, shade) {
+	const pts = corners.map(c => framePoint(origin, axes, c[0], c[1], c[2]));
+	const uvs = [[su0, sv1], [su1, sv1], [su1, sv0], [su0, sv0]];
+	const light = sceneLight() * (shade == null ? 0.95 : shade);
+	const order = [0, 1, 2, 0, 2, 3];
+	const t = Number.isInteger(tile) && tile >= 0 ? tile : 0;
+	for (const i of order) {
+		const uv = uvs[i];
+		list.push(pts[i][0], pts[i][1], pts[i][2], uv[0], uv[1], cr * light, cg * light, cb * light, t);
+	}
+}
+
+function drawItemFrame(list, origin, axes, frameTile, woodTile, glow) {
+	const p = 1 / 16;
+	const inner = 5 * p;
+	const outer = 6 * p;
+	const backZ = 0;
+	const leatherZ = 0.5 * p;
+	const woodZ = p;
+	const leather = Number.isInteger(frameTile) && frameTile >= 0 ? frameTile : -1;
+	const wood = Number.isInteger(woodTile) && woodTile >= 0 ? woodTile : leather;
+	const wr = wood >= 0 ? [1, 1, 1] : [0.86, 0.78, 0.55];
+	const wt = wood >= 0 ? wood : 0;
+	if (leather >= 0) {
+		drawFrameQuad(list, origin, axes, [[-inner, -inner, leatherZ], [inner, -inner, leatherZ], [inner, inner, leatherZ], [-inner, inner, leatherZ]], 3 * p, 3 * p, 13 * p, 13 * p, 1, 1, 1, leather, 0.85);
+	} else {
+		const back = glow ? [1, 0.95, 0.55] : [0.45, 0.28, 0.18];
+		drawFrameQuad(list, origin, axes, [[-inner, -inner, leatherZ], [inner, -inner, leatherZ], [inner, inner, leatherZ], [-inner, inner, leatherZ]], 0, 0, 1, 1, back[0], back[1], back[2], 0, 0.85);
+	}
+	drawFrameQuad(list, origin, axes, [[-outer, -outer, woodZ], [outer, -outer, woodZ], [outer, -inner, woodZ], [-outer, -inner, woodZ]], 2 * p, 13 * p, 14 * p, 14 * p, wr[0], wr[1], wr[2], wt, 0.95);
+	drawFrameQuad(list, origin, axes, [[-outer, inner, woodZ], [outer, inner, woodZ], [outer, outer, woodZ], [-outer, outer, woodZ]], 2 * p, 2 * p, 14 * p, 3 * p, wr[0], wr[1], wr[2], wt, 0.95);
+	drawFrameQuad(list, origin, axes, [[-outer, -inner, woodZ], [-inner, -inner, woodZ], [-inner, inner, woodZ], [-outer, inner, woodZ]], 2 * p, 3 * p, 3 * p, 13 * p, wr[0], wr[1], wr[2], wt, 0.95);
+	drawFrameQuad(list, origin, axes, [[inner, -inner, woodZ], [outer, -inner, woodZ], [outer, inner, woodZ], [inner, inner, woodZ]], 13 * p, 3 * p, 14 * p, 13 * p, wr[0], wr[1], wr[2], wt, 0.95);
+	drawFrameQuad(list, origin, axes, [[-inner, -inner, backZ], [inner, -inner, backZ], [inner, -inner, woodZ], [-inner, -inner, woodZ]], 2 * p, 15 * p, 14 * p, 16 * p, wr[0], wr[1], wr[2], wt, 0.7);
+	drawFrameQuad(list, origin, axes, [[-inner, inner, woodZ], [inner, inner, woodZ], [inner, inner, backZ], [-inner, inner, backZ]], 2 * p, 0, 14 * p, p, wr[0], wr[1], wr[2], wt, 0.7);
+	drawFrameQuad(list, origin, axes, [[-inner, -inner, woodZ], [-inner, inner, woodZ], [-inner, inner, backZ], [-inner, -inner, backZ]], 0, 3 * p, p, 13 * p, wr[0], wr[1], wr[2], wt, 0.62);
+	drawFrameQuad(list, origin, axes, [[inner, -inner, backZ], [inner, inner, backZ], [inner, inner, woodZ], [inner, -inner, woodZ]], 15 * p, 3 * p, 16 * p, 13 * p, wr[0], wr[1], wr[2], wt, 0.62);
+}
+
 function drawItemSprite(list, x, y, z, size, yaw) {
 	const hx = Math.cos(yaw) * size * 0.5;
 	const hz = Math.sin(yaw) * size * 0.5;
@@ -1390,6 +1468,68 @@ function render() {
 		drawTntCube(tntCubes, st.x, st.y, st.z, 0.98, side, top, bottom, flash, scale);
 	}
 	if (tntCubes.length) draw(new Float32Array(tntCubes), tntCubes.length / 9, mesh ? mesh.tiles : 1, hasAtlas && mesh ? 1 : 0, atlasTex);
+	const frameCubes = [];
+	const frameSprites = new Map();
+	for (const st of sampled.frames || []) {
+		const origin = [st.x, st.y, st.z];
+		const base = frameAxes(st.facing);
+		drawItemFrame(frameCubes, origin, base, st.frameTile, st.woodTile, !!st.glow);
+		if (!st.item) continue;
+		const rot = rotateFrameAxes(base, -(st.rotation || 0));
+		if (st.cube && Number.isInteger(st.tile) && st.tile >= 0 && mesh) {
+			const h = 0.125;
+			const corners = [];
+			for (const px of [-h, h]) {
+				for (const py of [-h, h]) {
+					for (const pz of [1 / 16, 1 / 16 + 0.25]) {
+						corners.push(framePoint(origin, rot, px, py, pz));
+					}
+				}
+			}
+			const faces = [
+				[0, 2, 3, 1, 0.7],
+				[4, 5, 7, 6, 0.9],
+				[0, 1, 5, 4, 0.6],
+				[2, 6, 7, 3, 0.8],
+				[1, 3, 7, 5, 1.0],
+				[0, 4, 6, 2, 0.5]
+			];
+			const uvs = [[0, 1], [1, 1], [1, 0], [0, 0]];
+			const light = sceneLight();
+			const order = [0, 1, 2, 0, 2, 3];
+			for (const f of faces) {
+				const sh = f[4] * light;
+				for (const i of order) {
+					const pt = corners[f[i]];
+					const uv = uvs[i];
+					frameCubes.push(pt[0], pt[1], pt[2], uv[0], uv[1], sh, sh, sh, st.tile);
+				}
+			}
+		} else {
+			const rec = ensureItem(st.item);
+			if (!rec.ready || !rec.mesh) continue;
+			if (!frameSprites.has(st.item)) frameSprites.set(st.item, { rec, data: [] });
+			const data = frameSprites.get(st.item).data;
+			const order = [0, 1, 2, 0, 2, 3];
+			const light = sceneLight();
+			for (const quad of rec.mesh) {
+				const pts = quad.p.map(pt => framePoint(origin, rot, (pt[0] / 16 - 0.5) * 0.5, (pt[1] / 16 - 0.5) * 0.5, 1 / 16 + 0.02 + (pt[2] / 16 - 0.5) * 0.08));
+				for (const i of order) {
+					const uv = quad.uv[i];
+					data.push(pts[i][0], pts[i][1], pts[i][2], uv[0], uv[1], light, light, light, 0);
+				}
+			}
+		}
+	}
+	if (frameCubes.length) draw(new Float32Array(frameCubes), frameCubes.length / 9, mesh ? mesh.tiles : 1, hasAtlas && mesh ? 1 : 0, atlasTex);
+	if (frameSprites.size) {
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		for (const group of frameSprites.values()) {
+			draw(new Float32Array(group.data), group.data.length / 9, 1, 1, group.rec.tex);
+		}
+		gl.disable(gl.BLEND);
+	}
 	const itemCubes = [];
 	const itemSprites = new Map();
 	for (const st of poses.values()) {
@@ -1697,6 +1837,7 @@ function connect(cam) {
 				ingestEntities(mobs, "mob");
 				ingestEntities(items, "item");
 				ingestEntities(msg.tnt || [], "tnt");
+				ingestEntities(msg.frames || [], "frame");
 				applySky(msg);
 			} else if (msg.type === "burst") {
 				spawnBurst(msg);
