@@ -298,6 +298,7 @@ function tickPoses(dt) {
 	const now = performance.now();
 	const playersOut = [];
 	const mobsOut = [];
+	const tntOut = [];
 	for (const st of poses.values()) {
 		const t = st.dur ? Math.min(1, (now - st.t0) / st.dur) : 1;
 		const s = t * t * (3 - 2 * t);
@@ -326,8 +327,9 @@ function tickPoses(dt) {
 		}
 		if (st.kind === "player") playersOut.push(st);
 		else if (st.kind === "mob") mobsOut.push(st);
+		else if (st.kind === "tnt") tntOut.push(st);
 	}
-	return { players: playersOut, mobs: mobsOut };
+	return { players: playersOut, mobs: mobsOut, tnt: tntOut };
 }
 
 function parseMesh(bytes) {
@@ -1164,6 +1166,32 @@ function drawTexturedCube(list, x, y, z, w, h, d, r, g, b, tile, yaw) {
 	}
 }
 
+function drawTntCube(list, x, y, z, size, tileSide, tileTop, tileBottom, flash, scale) {
+	const s = size * (scale || 1);
+	const ox = x - s / 2, oy = y, oz = z - s / 2;
+	const x0 = ox, y0 = oy, z0 = oz, x1 = ox + s, y1 = oy + s, z1 = oz + s;
+	const faces = [
+		[[x0,y0,z1], [x1,y0,z1], [x1,y1,z1], [x0,y1,z1], 0.9, tileSide],
+		[[x1,y0,z0], [x0,y0,z0], [x0,y1,z0], [x1,y1,z0], 0.7, tileSide],
+		[[x0,y0,z0], [x0,y0,z1], [x0,y1,z1], [x0,y1,z0], 0.6, tileSide],
+		[[x1,y0,z1], [x1,y0,z0], [x1,y1,z0], [x1,y1,z1], 0.8, tileSide],
+		[[x0,y1,z1], [x1,y1,z1], [x1,y1,z0], [x0,y1,z0], 1.0, tileTop],
+		[[x0,y0,z0], [x1,y0,z0], [x1,y0,z1], [x0,y0,z1], 0.5, tileBottom]
+	];
+	const uvs = [[0, 1], [1, 1], [1, 0], [0, 0]];
+	const light = sceneLight();
+	const order = [0, 1, 2, 0, 2, 3];
+	const boost = flash ? 2.2 : 1;
+	for (const f of faces) {
+		const sh = Math.min(1, f[4] * light * boost);
+		const tile = Number.isInteger(f[5]) && f[5] >= 0 ? f[5] : 0;
+		for (const i of order) {
+			const uv = uvs[i];
+			list.push(f[i][0], f[i][1], f[i][2], uv[0], uv[1], sh, sh, sh, tile);
+		}
+	}
+}
+
 function drawItemSprite(list, x, y, z, size, yaw) {
 	const hx = Math.cos(yaw) * size * 0.5;
 	const hz = Math.sin(yaw) * size * 0.5;
@@ -1344,6 +1372,24 @@ function render() {
 		drawBox(mobData, m.x - 0.25, m.y, m.z - 0.25, 0.5, 1.4, 0.5, 0.85, 0.4, 0.25);
 	}
 	if (mobData.length) draw(new Float32Array(mobData), mobData.length / 9, 1, 0, atlasTex);
+	const tntCubes = [];
+	for (const st of sampled.tnt || []) {
+		const fuse = Math.max(0, (st.fuse || 0) - (now - (st.t0 || now)) / 50);
+		const flash = Math.floor(fuse / 5) % 2 === 0;
+		let scale = 1;
+		if (fuse < 10) {
+			let g = 1 - fuse / 10;
+			g = Math.max(0, Math.min(1, g));
+			g *= g;
+			g *= g;
+			scale = 1 + g * 0.3;
+		}
+		const side = Number.isInteger(st.tileSide) ? st.tileSide : (Number.isInteger(st.tileTop) ? st.tileTop : 0);
+		const top = Number.isInteger(st.tileTop) ? st.tileTop : side;
+		const bottom = Number.isInteger(st.tileBottom) ? st.tileBottom : side;
+		drawTntCube(tntCubes, st.x, st.y, st.z, 0.98, side, top, bottom, flash, scale);
+	}
+	if (tntCubes.length) draw(new Float32Array(tntCubes), tntCubes.length / 9, mesh ? mesh.tiles : 1, hasAtlas && mesh ? 1 : 0, atlasTex);
 	const itemCubes = [];
 	const itemSprites = new Map();
 	for (const st of poses.values()) {
@@ -1650,6 +1696,7 @@ function connect(cam) {
 				ingestEntities(players, "player");
 				ingestEntities(mobs, "mob");
 				ingestEntities(items, "item");
+				ingestEntities(msg.tnt || [], "tnt");
 				applySky(msg);
 			} else if (msg.type === "burst") {
 				spawnBurst(msg);
