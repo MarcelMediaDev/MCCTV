@@ -1,13 +1,19 @@
+## Issue
+
+<!-- Closes #123 -->
+
 ## Summary
 
-<!-- What changed and why. Link an issue if there is one. -->
+<!-- What you changed to squash that issue. -->
 
 ## How you tested
 
-<!-- In-game and CCTV feed. Example: runServer, broke/placed blocks, hard-refreshed http://localhost:8088 -->
+<!-- In-game and CCTV feed. Example: runServer, reproduced the issue, hard-refreshed http://localhost:8088 -->
 
 ## Checklist
 
+- [ ] Fixes a filed issue (link above)
+- [ ] Does not restructure the mod unless that issue asked for it and it was discussed
 - [ ] `gradlew build` succeeds locally
 - [ ] Playable jar is `build/libs/mcctv-*.jar` (not `-sources`)
 - [ ] No `run/`, worlds, logs, tokens, or vanilla assets in the diff

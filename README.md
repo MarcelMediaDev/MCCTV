@@ -22,10 +22,42 @@ Nobody joining the server installs the mod. The reconstruction happens on the se
 ## Screenshots
 
 
-|                                                                                   |                                                                                      |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Live Feed**Live view from a camera. Not a video file, not a client screenshot. | **Placed Camera**A placed camera in the world. Vanilla clients do not need the mod. |
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/feed.png" width="95%" alt="Live feed" />
+      <br />
+      <b>Live Feed</b>
+      <p>Live view from a camera. Not a video file, not a client screenshot.</p>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/placed-camera.png" width="95%" alt="Placed camera" />
+      <br />
+      <b>Placed Camera</b>
+      <p>A placed camera in the world. Vanilla clients do not need the mod.</p>
+    </td>
+  </tr>
+</table>
 
+---
+
+## Using it
+
+The jar and Fabric API go in the server `mods` folder. Boot once so `config/mcctv.json` appears.
+
+Craft a CCTV Camera (iron, glass pane, redstone) or run `/cctv give`. Place it on a wall facing the room. `/cctv` prints a clickable link. Open it. The token in the URL is the lock; treat it like a password.
+
+The page is the monitor: channels on the left, live view on the right. Click a channel to switch cameras. Walk in front of one. You should show up.
+
+| Command | What it does |
+| --- | --- |
+| `/cctv` | Link to your cameras |
+| `/cctv name <name>` | Rename the nearest camera you own |
+| `/cctv token reset` | Kill the old link |
+| `/cctv give` | Give yourself a camera |
+| `/cctv remove` | Remove the nearest camera you own |
+
+Operators see every camera. Default bind is `0.0.0.0:8088`. Do not put that on the public internet without a reverse proxy and TLS. Set `publicBaseUrl` to the URL the browser actually uses.
 
 ---
 
@@ -45,40 +77,29 @@ An optional resource pack is what other players see on the camera block. The HTT
 
 ---
 
+## Contributing
+
+The [Issues](https://github.com/MarcelMediaDev/MCCTV/issues) tab is the queue. File what you hit while testing. GitHub will offer:
+
+- [Bug](.github/ISSUE_TEMPLATE/bug.md) — broken in-game or on the feed
+- [Request](.github/ISSUE_TEMPLATE/feature.md) — a missing feature, or a change that needs talking through first
+
+Pull requests exist to close those issues. One issue per PR. Do not redesign the package layout, meshing, patches, or the web server on the way past. You can still open that kind of PR; it waits on the comments before it lands.
+
+Build steps, the PR checklist, and the rest of the rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
 ## Requirements
 
+| Requirement | Version |
+| --- | --- |
+| Java | 21 |
+| Minecraft | 1.21.11 |
+| Fabric Loader | 0.19.3 |
+| Fabric API | 0.141.6+1.21.11 |
 
-| Requirement   | Version         |
-| ------------- | --------------- |
-| Java          | 21              |
-| Minecraft     | 1.21.11         |
-| Fabric Loader | 0.19.3          |
-| Fabric API    | 0.141.6+1.21.11 |
-
-
-Jar + Fabric API go in the server `mods` folder. Singleplayer works via `runClient` if you want to poke at it locally.
-
-## Setup
-
-1. Drop the mod jar and Fabric API on the server. Boot once so `config/mcctv.json` appears.
-2. Craft a CCTV Camera (iron, glass pane, redstone) or run `/cctv give`.
-3. Place the camera on a wall, facing the room you care about.
-4. Run `/cctv` and open the clickable link. Token is in the URL; treat it like a password.
-5. Walk in front of the camera. You should show up on the page.
-
-Hard-refresh the browser (Ctrl+F5) after you update the web UI.
-
-
-| Command             | What it does                      |
-| ------------------- | --------------------------------- |
-| `/cctv`             | Link to your cameras              |
-| `/cctv name <name>` | Rename the nearest camera you own |
-| `/cctv token reset` | Kill the old link                 |
-| `/cctv give`        | Give yourself a camera            |
-| `/cctv remove`      | Remove the nearest camera you own |
-
-
-Operators see every camera. Default bind is `0.0.0.0:8088`. Do not put that on the public internet without a reverse proxy and TLS. Set `publicBaseUrl` to whatever URL the browser actually uses.
+Singleplayer works via `runClient` if you want to poke at it locally.
 
 ## Config
 
@@ -110,10 +131,6 @@ gradlew.bat build          # Windows
 `runServer` uses game port **25565** and web **8088**. One instance at a time on the same `run/` world.
 
 GitHub Actions builds every pull request and attaches that jar as a workflow artifact. Review only — not a release.
-
-## Contributing
-
-Fork, patch, open a PR. Rules, test steps, and the PR checklist are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -1,56 +1,74 @@
 # Contributing to MCCTV
 
-Thanks for wanting to help. This is a Fabric **1.21.11 dedicated-server** mod: a live first-person CCTV feed in the browser from server world state. Joining players do not need the mod.
+This is a Fabric **1.21.11** dedicated-server mod: live first-person CCTV in a browser, rebuilt from server world state. Players on the server do not need the mod.
 
-You do not need to be invited. Fork the repo, open a pull request, and the maintainer will review it. PRs may be requested to change, delayed, or closed. Merging is not guaranteed.
+Start on the **Issues** tab. That is the queue. Testers file what they see. Pull requests exist to close those issues. Merging is not guaranteed. PRs may be asked to change, sit, or be closed.
 
-By submitting a pull request you license your contribution under the [MIT License](LICENSE), the same as the rest of the project.
+By submitting a pull request you license your contribution under the [MIT License](LICENSE).
 
-## Rules
+## Issues first
 
-1. **One concern per PR.** A visual fix, a performance fix, or one feature — not a bundle. Large work (TNT, mobs, boats, item frames, signs, and similar) should have an issue first.
-2. **Match what is already there.** Incremental terrain patches, existing camera/entity/held-item behavior, and server-tick cost are not optional. Do not full-rebuild the world mesh for a small block edit. Do not do unbounded work on the server thread.
-3. **Do not weaken security** without an issue and discussion. Camera tokens, bind address, and “this is an HTTP server” warnings stay unless the change is the point of the PR.
-4. **Do not commit** `run/`, worlds, logs, crash reports, tokens, `.env` files, or vanilla Minecraft assets. Loom copies vanilla textures at build time; they do not belong in git.
-5. **Test the CCTV feed**, not only that Gradle succeeded. If the change is visible on camera, say what you saw.
+Open an issue when something is wrong on the feed, in-game, or in the docs. GitHub offers two forms:
+
+- [Bug](.github/ISSUE_TEMPLATE/bug.md) — something broken in-game or on the CCTV feed
+- [Request](.github/ISSUE_TEMPLATE/feature.md) — a missing feature or a change that needs talking through first (including anything that would move the mod's structure)
+
+Use the matching form. Say what you did, what you saw, and whether the CCTV page matched the world. Screenshots or a short clip of the feed help.
+
+If you want to write code, pick an open issue (or file one) and say you are taking it. One issue per PR.
+
+Do not use a PR as the first place to dump a new idea. File the issue, talk there, then open the PR.
+
+## What a PR is for
+
+A PR should squash a specific issue: a missing model, a lighting bug, a hitch, a bad caption. Keep the change on that problem.
+
+The package layout, meshing pipeline, patch/relight path, HTTP/WebSocket server, and how the browser draws the world stay as they are unless we agree otherwise. You can still open a PR that wants to move that furniture. It will be discussed in the comments and will not land until that conversation is done. Do not rewrite the mod "while you are here."
+
+Same bar as before on the code that does land:
+
+- Incremental terrain patches. Do not full-rebuild the world mesh for a small block edit.
+- Do not do unbounded work on the server thread.
+- Do not weaken camera tokens or bind defaults unless the issue is about that.
+- Do not commit `run/`, worlds, logs, crash reports, tokens, `.env` files, or vanilla Minecraft assets. Loom copies vanilla textures at build time.
+- Test the CCTV feed, not only that Gradle succeeded.
 
 ## Build
 
-You need **Java 21**.
-
-Windows:
+Java **21**.
 
 ```
-gradlew.bat build
+gradlew.bat build          # Windows
+./gradlew build            # Linux / macOS
 ```
 
-Linux / macOS:
+Playable jar: `build/libs/mcctv-*.jar`. Not the `-sources` jar.
 
-```
-./gradlew build
-```
+`./gradlew runServer` is game **25565**, web **8088**. One instance at a time on this `run/` world. After `app.js` changes, hard-refresh the browser (Ctrl+F5).
 
-The playable jar is `build/libs/mcctv-*.jar`. Do not ship or upload the `-sources` jar.
-
-`./gradlew runServer` starts a local dedicated server (game **25565**, web **8088**). Only one `runServer` at a time on this `run/` world. After web/`app.js` changes, hard-refresh the browser (Ctrl+F5).
-
-Pull requests run the same `./gradlew build` on GitHub Actions and attach the jar as a **workflow artifact**. That is for review. It is not an official release.
+GitHub Actions runs the same build on every PR and attaches the jar as a **workflow artifact**. Review only. Not an official release.
 
 ## Pull request template
 
-Copy this into the PR body (GitHub also inserts it automatically):
+GitHub inserts this when you open a PR. The issue link is required.
 
 ```markdown
+## Issue
+
+<!-- Closes #123 -->
+
 ## Summary
 
-<!-- What changed and why. Link an issue if there is one. -->
+<!-- What you changed to squash that issue. -->
 
 ## How you tested
 
-<!-- In-game and CCTV feed. Example: runServer, broke/placed blocks, hard-refreshed http://localhost:8088 -->
+<!-- In-game and CCTV feed. Example: runServer, reproduced the issue, hard-refreshed http://localhost:8088 -->
 
 ## Checklist
 
+- [ ] Fixes a filed issue (link above)
+- [ ] Does not restructure the mod unless that issue asked for it and it was discussed
 - [ ] `gradlew build` succeeds locally
 - [ ] Playable jar is `build/libs/mcctv-*.jar` (not `-sources`)
 - [ ] No `run/`, worlds, logs, tokens, or vanilla assets in the diff
