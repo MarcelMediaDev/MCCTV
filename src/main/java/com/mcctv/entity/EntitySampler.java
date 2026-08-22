@@ -10,6 +10,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.ItemStack;
@@ -92,9 +93,41 @@ public final class EntitySampler {
 		root.add("players", players);
 		root.add("mobs", mobs);
 		root.add("items", sampleItems(world, camera, eye, look, range));
+		root.add("tnt", sampleTnt(world, camera, eye, look, range));
 		root.addProperty("count", entities.size());
 		SkyAppearance.capture(world, eye.x, eye.y, eye.z, config.viewDistance).writeJson(root);
 		return root;
+	}
+
+	private static JsonArray sampleTnt(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {
+		JsonArray tnt = new JsonArray();
+		Box box = new Box(eye, eye).expand(range);
+		List<TntEntity> primed = world.getEntitiesByClass(TntEntity.class, box, entity -> inView(eye, look, entity.getX(), entity.getY() + 0.49, entity.getZ(), range));
+		for (TntEntity entity : primed) {
+			JsonObject json = new JsonObject();
+			json.addProperty("uuid", entity.getUuidAsString());
+			json.addProperty("x", entity.getX());
+			json.addProperty("y", entity.getY());
+			json.addProperty("z", entity.getZ());
+			json.addProperty("fuse", entity.getFuse());
+			tnt.add(json);
+		}
+		return tnt;
+	}
+
+	private static boolean inView(Vec3d eye, Vec3d look, double x, double y, double z, double range) {
+		double dx = x - eye.x;
+		double dy = y - eye.y;
+		double dz = z - eye.z;
+		double dist2 = dx * dx + dy * dy + dz * dz;
+		if (dist2 > range * range) {
+			return false;
+		}
+		if (dist2 < 4) {
+			return true;
+		}
+		double inv = 1.0 / Math.sqrt(dist2);
+		return dx * inv * look.x + dy * inv * look.y + dz * inv * look.z > 0.05;
 	}
 
 	private static JsonArray sampleItems(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {

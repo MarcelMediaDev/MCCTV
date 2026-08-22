@@ -482,6 +482,11 @@ public class CctvSessions {
 					assignTile(book, el.getAsJsonObject());
 				}
 			}
+			if (payload.has("tnt")) {
+				for (var el : payload.getAsJsonArray("tnt")) {
+					assignTntTiles(book, el.getAsJsonObject());
+				}
+			}
 			if (payload.has("players")) {
 				for (var el : payload.getAsJsonArray("players")) {
 					JsonObject player = el.getAsJsonObject();
@@ -521,6 +526,31 @@ public class CctvSessions {
 			array.add(obj);
 		}
 		return array;
+	}
+
+	private static void assignTntTiles(ChunkMesher.AtlasBook book, JsonObject obj) {
+		int side = ChunkMesher.lookupTile(book, "tnt_side");
+		int top = ChunkMesher.lookupTile(book, "tnt_top");
+		int bottom = ChunkMesher.lookupTile(book, "tnt_bottom");
+		int any = ChunkMesher.lookupTile(book, "tnt");
+		if (side < 0) {
+			side = any;
+		}
+		if (top < 0) {
+			top = any;
+		}
+		if (bottom < 0) {
+			bottom = any;
+		}
+		if (side >= 0) {
+			obj.addProperty("tileSide", side);
+		}
+		if (top >= 0) {
+			obj.addProperty("tileTop", top);
+		}
+		if (bottom >= 0) {
+			obj.addProperty("tileBottom", bottom);
+		}
 	}
 
 	private static void assignTile(ChunkMesher.AtlasBook book, JsonObject obj) {
