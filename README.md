@@ -10,6 +10,7 @@ Live CCTV for a Minecraft server. Place cameras, open a browser, watch the room.
 [![Java](https://img.shields.io/badge/Java-21-007396)](https://adoptium.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Build](https://img.shields.io/github/actions/workflow/status/MarcelMediaDev/MCCTV/build.yml?branch=main&label=Build)](https://github.com/MarcelMediaDev/MCCTV/actions/workflows/build.yml)
+![](https://img.shields.io/badge/DISCORD-discord.gg%2Ffzew9pqq4f-7289da?style=flat&logo=discord)
 
 </div>
 
