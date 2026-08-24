@@ -85,6 +85,10 @@ public class CctvHttpServer {
 			)
 	);
 	private final byte[] destroyAtlas;
+	private final byte[] asciiFont = firstNonEmpty(
+			loadClasspath("/assets/mcctv/vanilla/font/ascii.png"),
+			loadVanillaTexture("assets/minecraft/textures/font/ascii.png")
+	);
 
 	public CctvHttpServer(CctvConfig config, CameraRegistry cameras, CctvSessions sessions) {
 		this.config = config;
@@ -192,6 +196,14 @@ public class CctvHttpServer {
 			}
 			if (path.startsWith("/api/skin/")) {
 				this.apiSkin(ctx, request, path.substring("/api/skin/".length()));
+				return;
+			}
+			if ("/api/font/ascii.png".equals(path)) {
+				if (CctvHttpServer.this.asciiFont.length == 0) {
+					send(ctx, request, HttpResponseStatus.NOT_FOUND, "text/plain", "No font");
+					return;
+				}
+				sendBytes(ctx, request, HttpResponseStatus.OK, "image/png", CctvHttpServer.this.asciiFont);
 				return;
 			}
 			if (path.startsWith("/api/item/")) {

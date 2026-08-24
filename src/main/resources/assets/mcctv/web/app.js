@@ -300,6 +300,7 @@ function tickPoses(dt) {
 	const mobsOut = [];
 	const tntOut = [];
 	const framesOut = [];
+	const signsOut = [];
 	for (const st of poses.values()) {
 		const t = st.dur ? Math.min(1, (now - st.t0) / st.dur) : 1;
 		const s = t * t * (3 - 2 * t);
@@ -330,8 +331,9 @@ function tickPoses(dt) {
 		else if (st.kind === "mob") mobsOut.push(st);
 		else if (st.kind === "tnt") tntOut.push(st);
 		else if (st.kind === "frame") framesOut.push(st);
+		else if (st.kind === "sign") signsOut.push(st);
 	}
-	return { players: playersOut, mobs: mobsOut, tnt: tntOut, frames: framesOut };
+	return { players: playersOut, mobs: mobsOut, tnt: tntOut, frames: framesOut, signs: signsOut };
 }
 
 function parseMesh(bytes) {
@@ -1270,6 +1272,184 @@ function drawItemFrame(list, origin, axes, frameTile, woodTile, glow) {
 	drawFrameQuad(list, origin, axes, [[inner, -inner, backZ], [inner, inner, backZ], [inner, inner, woodZ], [inner, -inner, woodZ]], 15 * p, 3 * p, 16 * p, 13 * p, wr[0], wr[1], wr[2], wt, 0.62);
 }
 
+function signYaw(st) {
+	if (st.wall) {
+		switch (st.facing) {
+			case 2: return 180;
+			case 4: return 90;
+			case 5: return 270;
+			default: return 0;
+		}
+	}
+	return -(st.rotation || 0) * 22.5;
+}
+
+function signPoint(origin, yawDeg, x, y, z) {
+	const rad = yawDeg * Math.PI / 180;
+	const c = Math.cos(rad), s = Math.sin(rad);
+	const lx = x - 8, lz = z - 8;
+	return [
+		origin[0] + (lx * c + lz * s + 8) / 16,
+		origin[1] + y / 16,
+		origin[2] + (-lx * s + lz * c + 8) / 16
+	];
+}
+
+function signBoard(st) {
+	if (st.hanging && st.wall) return { x0: 1, y0: 0, z0: 0, x1: 15, y1: 10, z1: 2 };
+	if (st.hanging) return { x0: 1, y0: 0, z0: 7, x1: 15, y1: 10, z1: 9 };
+	const s = 2 / 3;
+	if (st.wall) {
+		return { x0: (-4 - 8) * s + 8, y0: 7 * s, z0: 0, x1: (20 - 8) * s + 8, y1: 19 * s, z1: 2 * s };
+	}
+	return {
+		x0: (-4 - 8) * s + 8, y0: 7 * s, z0: (7 - 8) * s + 8,
+		x1: (20 - 8) * s + 8, y1: 19 * s, z1: (9 - 8) * s + 8
+	};
+}
+
+const signTex = new Map();
+let asciiFont = null;
+const glyphW = new Uint8Array(256);
+fetch("/api/font/ascii.png").then(r => r.ok ? r.blob() : Promise.reject()).then(blob => createImageBitmap(blob)).then(img => {
+	asciiFont = img;
+	measureGlyphs();
+	signTex.clear();
+}).catch(() => { asciiFont = null; });
+
+function fontCell() {
+	return asciiFont && asciiFont.width >= 200 ? 16 : 8;
+}
+
+function measureGlyphs() {
+	if (!asciiFont) return;
+	const cell = fontCell();
+	const cols = (asciiFont.width / cell) | 0;
+	const c = document.createElement("canvas");
+	c.width = asciiFont.width;
+	c.height = asciiFont.height;
+	const ctx = c.getContext("2d", { willReadFrequently: true });
+	ctx.imageSmoothingEnabled = false;
+	ctx.drawImage(asciiFont, 0, 0);
+	const pix = ctx.getImageData(0, 0, c.width, c.height).data;
+	for (let ch = 0; ch < 256; ch++) {
+		const sx = (ch % cols) * cell;
+		const sy = ((ch / cols) | 0) * cell;
+		let last = 0;
+		for (let x = 0; x < cell; x++) {
+			for (let y = 0; y < cell; y++) {
+				if (pix[((sy + y) * c.width + sx + x) * 4 + 3] > 16) last = x + 1;
+			}
+		}
+		glyphW[ch] = ch === 32 ? Math.max(2, (cell * 0.5) | 0) : Math.max(1, last);
+	}
+}
+
+function glyphAdvance(ch) {
+	const cell = fontCell();
+	const gw = glyphW[ch & 255] || cell;
+	return ((gw * 8 / cell) | 0) + 1;
+}
+
+function lineWidth(text) {
+	let w = 0;
+	for (let i = 0; i < text.length; i++) {
+		w += glyphAdvance(text.charCodeAt(i));
+	}
+	return w;
+}
+
+function blitAscii(ctx, text, x, y, color) {
+	const cell = fontCell();
+	const dest = 8;
+	let dx = x;
+	for (let i = 0; i < text.length; i++) {
+		const ch = text.charCodeAt(i) & 255;
+		const cols = (asciiFont.width / cell) | 0;
+		const sx = (ch % cols) * cell;
+		const sy = ((ch / cols) | 0) * cell;
+		const glyphs = document.createElement("canvas");
+		glyphs.width = dest;
+		glyphs.height = dest;
+		const g = glyphs.getContext("2d");
+		g.imageSmoothingEnabled = false;
+		g.clearRect(0, 0, dest, dest);
+		g.drawImage(asciiFont, sx, sy, cell, cell, 0, 0, dest, dest);
+		g.globalCompositeOperation = "source-in";
+		g.fillStyle = color;
+		g.fillRect(0, 0, dest, dest);
+		ctx.drawImage(glyphs, dx, y);
+		dx += glyphAdvance(ch);
+	}
+}
+
+function ensureSignSide(side) {
+	if (!side || !(side.lines || []).some(line => line && String(line).length)) return null;
+	if (!asciiFont) return null;
+	const key = (side.lines || []).join("\n") + "|" + (side.color || "#000000") + "|" + !!side.glow;
+	if (signTex.has(key)) return signTex.get(key);
+	const lines = [0, 1, 2, 3].map(i => String((side.lines || [])[i] || ""));
+	const lineH = 10;
+	const maxW = Math.max(8, ...lines.map(line => lineWidth(line) || 0));
+	const w = maxW;
+	const h = lineH * 4;
+	const rec = { tex: gl.createTexture(), ready: false, w, h };
+	signTex.set(key, rec);
+	const canvas = document.createElement("canvas");
+	canvas.width = w;
+	canvas.height = h;
+	const ctx = canvas.getContext("2d");
+	ctx.imageSmoothingEnabled = false;
+	ctx.clearRect(0, 0, w, h);
+	const color = side.color || "#000000";
+	const outline = color === "#000000" || color === "#000" ? "#FFFFFF" : "#000000";
+	for (let i = 0; i < 4; i++) {
+		const line = lines[i];
+		if (!line) continue;
+		const x = ((w - lineWidth(line)) / 2) | 0;
+		const y = i * lineH;
+		if (side.glow) {
+			for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+				blitAscii(ctx, line, x + ox, y + oy, outline);
+			}
+		}
+		blitAscii(ctx, line, x, y, color);
+	}
+	gl.bindTexture(gl.TEXTURE_2D, rec.tex);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+	rec.ready = true;
+	return rec;
+}
+
+function drawSignSide(list, origin, yaw, board, front, inset, rec) {
+	const z = front ? board.z1 + inset : board.z0 - inset;
+	const cx = (board.x0 + board.x1) * 0.5;
+	const cy = (board.y0 + board.y1) * 0.5;
+	const hx = (rec.w / 96) * 8;
+	const hy = (rec.h / 96) * 8;
+	const pts = front ? [
+		signPoint(origin, yaw, cx - hx, cy - hy, z),
+		signPoint(origin, yaw, cx + hx, cy - hy, z),
+		signPoint(origin, yaw, cx + hx, cy + hy, z),
+		signPoint(origin, yaw, cx - hx, cy + hy, z)
+	] : [
+		signPoint(origin, yaw, cx + hx, cy - hy, z),
+		signPoint(origin, yaw, cx - hx, cy - hy, z),
+		signPoint(origin, yaw, cx - hx, cy + hy, z),
+		signPoint(origin, yaw, cx + hx, cy + hy, z)
+	];
+	const uvs = [[0, 1], [1, 1], [1, 0], [0, 0]];
+	const order = [0, 1, 2, 0, 2, 3];
+	for (const i of order) {
+		const uv = uvs[i];
+		list.push(pts[i][0], pts[i][1], pts[i][2], uv[0], uv[1], 1, 1, 1, 0);
+	}
+}
+
 function drawItemSprite(list, x, y, z, size, yaw) {
 	const hx = Math.cos(yaw) * size * 0.5;
 	const hz = Math.sin(yaw) * size * 0.5;
@@ -1528,6 +1708,33 @@ function render() {
 		for (const group of frameSprites.values()) {
 			draw(new Float32Array(group.data), group.data.length / 9, 1, 1, group.rec.tex);
 		}
+		gl.disable(gl.BLEND);
+	}
+	const signGroups = new Map();
+	for (const st of sampled.signs || []) {
+		const origin = [st.x, st.y, st.z];
+		const yaw = signYaw(st);
+		const board = signBoard(st);
+		const sides = [
+			[st.front, true],
+			[st.back, false]
+		];
+		for (const [side, front] of sides) {
+			const rec = ensureSignSide(side);
+			if (!rec || !rec.ready) continue;
+			const key = (side.lines || []).join("\n") + "|" + (side.color || "") + "|" + !!side.glow;
+			if (!signGroups.has(key)) signGroups.set(key, { rec, data: [] });
+			drawSignSide(signGroups.get(key).data, origin, yaw, board, front, 0.02, rec);
+		}
+	}
+	if (signGroups.size) {
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		gl.depthMask(false);
+		for (const group of signGroups.values()) {
+			draw(new Float32Array(group.data), group.data.length / 9, 1, 1, group.rec.tex);
+		}
+		gl.depthMask(true);
 		gl.disable(gl.BLEND);
 	}
 	const itemCubes = [];
@@ -1838,6 +2045,7 @@ function connect(cam) {
 				ingestEntities(items, "item");
 				ingestEntities(msg.tnt || [], "tnt");
 				ingestEntities(msg.frames || [], "frame");
+				ingestEntities(msg.signs || [], "sign");
 				applySky(msg);
 			} else if (msg.type === "burst") {
 				spawnBurst(msg);
