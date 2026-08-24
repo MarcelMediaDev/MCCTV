@@ -7,6 +7,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.block.entity.SignBlockEntity;
+import net.minecraft.block.entity.SignText;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
@@ -18,12 +21,16 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Properties;
 import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.DyeColor;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.chunk.WorldChunk;
 
 import java.util.HashMap;
 import java.util.List;
@@ -97,6 +104,7 @@ public final class EntitySampler {
 		root.add("items", sampleItems(world, camera, eye, look, range));
 		root.add("tnt", sampleTnt(world, camera, eye, look, range));
 		root.add("frames", sampleFrames(world, camera, eye, look, range));
+		root.add("signs", sampleSigns(world, camera, eye, look, range));
 		root.addProperty("count", entities.size());
 		SkyAppearance.capture(world, eye.x, eye.y, eye.z, config.viewDistance).writeJson(root);
 		return root;
@@ -127,6 +135,65 @@ public final class EntitySampler {
 			frames.add(json);
 		}
 		return frames;
+	}
+
+	private static JsonArray sampleSigns(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {
+		JsonArray signs = new JsonArray();
+		int minCx = MathHelper.floor(eye.x - range) >> 4;
+		int maxCx = MathHelper.floor(eye.x + range) >> 4;
+		int minCz = MathHelper.floor(eye.z - range) >> 4;
+		int maxCz = MathHelper.floor(eye.z + range) >> 4;
+		for (int cx = minCx; cx <= maxCx; cx++) {
+			for (int cz = minCz; cz <= maxCz; cz++) {
+				WorldChunk chunk = world.getChunk(cx, cz);
+				for (BlockEntity be : chunk.getBlockEntities().values()) {
+					if (!(be instanceof SignBlockEntity sign)) {
+						continue;
+					}
+					BlockPos pos = sign.getPos();
+					if (!inView(eye, look, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, range)) {
+						continue;
+					}
+					BlockState state = sign.getCachedState();
+					String id = Registries.BLOCK.getId(state.getBlock()).getPath();
+					JsonObject json = new JsonObject();
+					json.addProperty("uuid", "sign:" + pos.getX() + "," + pos.getY() + "," + pos.getZ());
+					json.addProperty("x", pos.getX());
+					json.addProperty("y", pos.getY());
+					json.addProperty("z", pos.getZ());
+					json.addProperty("hanging", id.contains("hanging"));
+					json.addProperty("wall", id.contains("wall"));
+					int rotation = 0;
+					if (state.contains(Properties.ROTATION)) {
+						rotation = state.get(Properties.ROTATION);
+					}
+					json.addProperty("rotation", rotation);
+					Direction facing = Direction.SOUTH;
+					if (state.contains(Properties.HORIZONTAL_FACING)) {
+						facing = state.get(Properties.HORIZONTAL_FACING);
+					}
+					json.addProperty("facing", facing.getId());
+					json.add("front", signSideJson(sign.getFrontText()));
+					json.add("back", signSideJson(sign.getBackText()));
+					signs.add(json);
+				}
+			}
+		}
+		return signs;
+	}
+
+	private static JsonObject signSideJson(SignText text) {
+		JsonObject json = new JsonObject();
+		JsonArray lines = new JsonArray();
+		for (int i = 0; i < 4; i++) {
+			lines.add(text.getMessage(i, false).getString());
+		}
+		json.add("lines", lines);
+		DyeColor dye = text.getColor();
+		int rgb = dye != null ? dye.getSignColor() : 0;
+		json.addProperty("color", String.format("#%06X", rgb & 0xFFFFFF));
+		json.addProperty("glow", text.isGlowing());
+		return json;
 	}
 
 	private static JsonArray sampleTnt(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {

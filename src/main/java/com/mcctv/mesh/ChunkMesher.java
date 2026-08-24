@@ -130,10 +130,26 @@ public final class ChunkMesher {
 					seedCuboidTiles(book, name, 0, 19, 15, 10, 14);
 					seedCuboidTiles(book, name, 0, 0, 15, 5, 14);
 					seedCuboidTiles(book, name, 0, 0, 1, 4, 1);
+				} else if (name.startsWith("entity_sign_hanging_")) {
+					seedCuboidTiles(book, name, 0, 12, 14, 10, 2);
+				} else if (name.startsWith("entity_sign_")) {
+					seedSignBoardTiles(book, name);
 				}
 				continue;
 			}
 			tileIndex(book, new BlockAppearance.Face(name, 0xFFFFFF, false), 0x7F7F7F);
+		}
+	}
+
+	private static void seedSignBoardTiles(AtlasBook book, String name) {
+		String[] crops = {
+				"2,2,16,12", "18,2,8,12", "28,2,8,12", "36,2,16,12",
+				"2,0,16,2", "18,0,8,2", "26,0,16,2", "42,0,8,2",
+				"0,2,2,12", "26,2,2,12", "2,14,2,2",
+				"0,16,2,7", "2,16,2,7", "4,16,2,7", "6,16,2,7"
+		};
+		for (String crop : crops) {
+			tileIndex(book, new BlockAppearance.Face(name + "@" + crop, 0xFFFFFF, false), 0x7F7F7F);
 		}
 	}
 

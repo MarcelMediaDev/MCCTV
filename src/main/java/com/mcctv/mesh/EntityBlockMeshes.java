@@ -15,7 +15,14 @@ final class EntityBlockMeshes {
 		if (isChest(id)) {
 			return chest(id, props, extraY);
 		}
+		if (isSign(id)) {
+			return sign(id, props, extraY);
+		}
 		return List.of();
+	}
+
+	private static boolean isSign(String id) {
+		return id.endsWith("_sign");
 	}
 
 	private static boolean isChest(String id) {
@@ -111,13 +118,98 @@ final class EntityBlockMeshes {
 		return "entity_chest_" + base;
 	}
 
+	private static final float SIGN_SCALE = 2f / 3f;
+
+	private static List<BlockModels.BakedQuad> sign(String id, Map<String, String> props, int extraY) {
+		boolean hanging = id.contains("hanging");
+		boolean wall = id.contains("wall");
+		String tex = signTexture(signWood(id), hanging);
+		float rotY = signYaw(props, extraY, wall);
+		List<BlockModels.BakedQuad> list = new ArrayList<>();
+		if (hanging && wall) {
+			addCuboid(list, 1, 0, 0, 14, 10, 2, tex, 0, 12, rotY);
+		} else if (hanging) {
+			addCuboid(list, 1, 0, 7, 14, 10, 2, tex, 0, 12, rotY);
+		} else if (wall) {
+			addStandingBoard(list, -4, 7, 0, tex, rotY);
+			scaleSignQuads(list, true);
+		} else {
+			addSignPost(list, 7, 0, 7, tex, rotY);
+			addStandingBoard(list, -4, 7, 7, tex, rotY);
+			scaleSignQuads(list, false);
+		}
+		return list;
+	}
+
+	private static void addSignPost(List<BlockModels.BakedQuad> list, float x, float y, float z, String tex, float rotY) {
+		float x1 = x + 2, y1 = y + 7, z1 = z + 2;
+		addFace(list, "down", x, y, z, x1, y1, z1, tex, "2,14,2,2", rotY, 0f, true);
+		addFace(list, "west", x, y, z, x1, y1, z1, tex, "0,16,2,7", rotY, 0f, true);
+		addFace(list, "south", x, y, z, x1, y1, z1, tex, "2,16,2,7", rotY, 0f, true);
+		addFace(list, "east", x, y, z, x1, y1, z1, tex, "4,16,2,7", rotY, 0f, true);
+		addFace(list, "north", x, y, z, x1, y1, z1, tex, "6,16,2,7", rotY, 0f, true);
+	}
+
+	private static void addStandingBoard(List<BlockModels.BakedQuad> list, float x, float y, float z, String tex, float rotY) {
+		float y1 = y + 12, z1 = z + 2, mid = x + 16, x1 = x + 24;
+		addFace(list, "south", x, y, z, mid, y1, z1, tex, "2,2,16,12", rotY, 0f, true);
+		addFace(list, "north", x, y, z, mid, y1, z1, tex, "36,2,16,12", rotY, 0f, true);
+		addFace(list, "west", x, y, z, mid, y1, z1, tex, "0,2,2,12", rotY, 0f, true);
+		addFace(list, "down", x, y, z, mid, y1, z1, tex, "2,0,16,2", rotY, 0f, true);
+		addFace(list, "up", x, y, z, mid, y1, z1, tex, "26,0,16,2", rotY, 0f, true);
+		addFace(list, "south", mid, y, z, x1, y1, z1, tex, "18,2,8,12", rotY, 0f, true);
+		addFace(list, "north", mid, y, z, x1, y1, z1, tex, "28,2,8,12", rotY, 0f, true);
+		addFace(list, "east", mid, y, z, x1, y1, z1, tex, "26,2,2,12", rotY, 0f, true);
+		addFace(list, "down", mid, y, z, x1, y1, z1, tex, "18,0,8,2", rotY, 0f, true);
+		addFace(list, "up", mid, y, z, x1, y1, z1, tex, "42,0,8,2", rotY, 0f, true);
+	}
+
+	private static void scaleSignQuads(List<BlockModels.BakedQuad> list, boolean wall) {
+		for (BlockModels.BakedQuad quad : list) {
+			for (float[] c : quad.corners()) {
+				c[0] = (c[0] - 0.5f) * SIGN_SCALE + 0.5f;
+				c[1] *= SIGN_SCALE;
+				c[2] = wall ? c[2] * SIGN_SCALE : (c[2] - 0.5f) * SIGN_SCALE + 0.5f;
+			}
+		}
+	}
+
+	private static String signWood(String id) {
+		String wood = id.replace("_wall_hanging_sign", "")
+				.replace("_hanging_sign", "")
+				.replace("_wall_sign", "")
+				.replace("_sign", "");
+		return wood.isEmpty() ? "oak" : wood;
+	}
+
+	private static String signTexture(String wood, boolean hanging) {
+		String entity = hanging ? "entity_sign_hanging_" + wood : "entity_sign_" + wood;
+		if (BlockTextures.has(entity)) {
+			return entity;
+		}
+		return hanging && BlockTextures.has("stripped_" + wood + "_log") ? "stripped_" + wood + "_log" : wood + "_planks";
+	}
+
+	private static float signYaw(Map<String, String> props, int extraY, boolean wall) {
+		if (wall) {
+			return yaw(extraY, props.get("facing"), false);
+		}
+		int rotation = 0;
+		try {
+			rotation = Integer.parseInt(props.getOrDefault("rotation", "0"));
+		} catch (NumberFormatException ignored) {
+			rotation = 0;
+		}
+		return -rotation * 22.5f;
+	}
+
 	private static void addCuboid(List<BlockModels.BakedQuad> list, float x, float y, float z,
-			float dx, float dy, float dz, String tex, int u, int v, int rotY) {
+			float dx, float dy, float dz, String tex, int u, int v, float rotY) {
 		addCuboid(list, x, y, z, dx, dy, dz, tex, u, v, rotY, 0f);
 	}
 
 	private static void addCuboid(List<BlockModels.BakedQuad> list, float x, float y, float z,
-			float dx, float dy, float dz, String tex, int u, int v, int rotY, float pitch) {
+			float dx, float dy, float dz, String tex, int u, int v, float rotY, float pitch) {
 		int iu = Math.max(1, Math.round(dx));
 		int iv = Math.max(1, Math.round(dy));
 		int iz = Math.max(1, Math.round(dz));
@@ -132,7 +224,7 @@ final class EntityBlockMeshes {
 	}
 
 	private static void addFace(List<BlockModels.BakedQuad> list, String dir, float x0, float y0, float z0,
-			float x1, float y1, float z1, String tex, String spec, int rotY, float pitch, boolean shade) {
+			float x1, float y1, float z1, String tex, String spec, float rotY, float pitch, boolean shade) {
 		if (BlockTextures.regionEmpty(tex, spec)) {
 			return;
 		}
@@ -158,6 +250,10 @@ final class EntityBlockMeshes {
 					w = Math.abs(Integer.parseInt(parts[2].trim()));
 					h = Math.abs(Integer.parseInt(parts[3].trim()));
 					rotate = parts.length >= 5 && parts[4].toLowerCase().contains("r");
+					if (parts.length >= 5 && parts[4].toLowerCase().contains("s")) {
+						w = 16;
+						h = 16;
+					}
 				} catch (NumberFormatException ignored) {
 				}
 			}
@@ -200,7 +296,7 @@ final class EntityBlockMeshes {
 	}
 
 	private static BlockModels.BakedQuad face(String dir, float x0, float y0, float z0, float x1, float y1, float z1,
-			String tex, String spec, int rotY, float pitch, boolean shade, boolean minusY) {
+			String tex, String spec, float rotY, float pitch, boolean shade, boolean minusY) {
 		String texture = tex + "@" + spec;
 		float[][] corners = switch (dir) {
 			case "down" -> new float[][] {{x0, y0, z1}, {x1, y0, z1}, {x1, y0, z0}, {x0, y0, z0}};
@@ -211,7 +307,9 @@ final class EntityBlockMeshes {
 			default -> new float[][] {{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}};
 		};
 		float[][] uvs = cropUvs(spec);
-		int turns = Math.floorMod(rotY / 90, 4);
+		float deg = minusY ? -rotY : rotY;
+		float cosY = (float) Math.cos(Math.toRadians(deg));
+		float sinY = (float) Math.sin(Math.toRadians(deg));
 		for (float[] c : corners) {
 			if (pitch != 0f) {
 				float ly = c[1] - 9f;
@@ -222,22 +320,11 @@ final class EntityBlockMeshes {
 				c[2] = ly * sin + lz * cos + 1f;
 			}
 			float x = c[0] - 8, z = c[2] - 8;
-			for (int i = 0; i < turns; i++) {
-				float nx;
-				float nz;
-				if (minusY) {
-					nx = -z;
-					nz = x;
-				} else {
-					nx = z;
-					nz = -x;
-				}
-				x = nx;
-				z = nz;
-			}
-			c[0] = (x + 8) / 16f;
+			float nx = x * cosY + z * sinY;
+			float nz = -x * sinY + z * cosY;
+			c[0] = (nx + 8) / 16f;
 			c[1] /= 16f;
-			c[2] = (z + 8) / 16f;
+			c[2] = (nz + 8) / 16f;
 		}
 		return new BlockModels.BakedQuad(corners, uvs, texture, -1, "", shade);
 	}

@@ -138,6 +138,7 @@ public final class BlockTextures {
 			int w = Integer.parseInt(parts[2].trim());
 			int h = Integer.parseInt(parts[3].trim());
 			boolean rotate = parts.length >= 5 && parts[4].toLowerCase().contains("r");
+			boolean scale = parts.length >= 5 && parts[4].toLowerCase().contains("s");
 			if (w < 0) {
 				u += w;
 				w = -w;
@@ -169,6 +170,12 @@ public final class BlockTextures {
 			BufferedImage out = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
 			Graphics2D g = out.createGraphics();
 			g.setComposite(java.awt.AlphaComposite.Src);
+			if (scale || w > 16 || h > 16) {
+				g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+				g.drawImage(part, 0, 0, 16, 16, null);
+				g.dispose();
+				return out;
+			}
 			g.drawImage(part, 0, 0, null);
 			g.dispose();
 			clampPad(out, w, h);
@@ -286,6 +293,14 @@ public final class BlockTextures {
 				"/assets/mcctv/vanilla/entity-chest-index.txt",
 				"/assets/mcctv/vanilla/entity/chest/",
 				"entity_chest_");
+		bundled += loadPrefixed(
+				"/assets/mcctv/vanilla/entity-sign-index.txt",
+				"/assets/mcctv/vanilla/entity/signs/",
+				"entity_sign_");
+		bundled += loadPrefixed(
+				"/assets/mcctv/vanilla/entity-sign-hanging-index.txt",
+				"/assets/mcctv/vanilla/entity/signs/hanging/",
+				"entity_sign_hanging_");
 		try {
 			ModContainer container = FabricLoader.getInstance().getModContainer("minecraft").orElse(null);
 			if (container != null) {
@@ -316,6 +331,8 @@ public final class BlockTextures {
 					stream.filter(p -> p.getFileName().toString().endsWith(".png")).forEach(BlockTextures::readFile);
 				}
 			}
+			loadSignDir(root.resolve("assets/minecraft/textures/entity/signs"), "entity_sign_");
+			loadSignDir(root.resolve("assets/minecraft/textures/entity/signs/hanging"), "entity_sign_hanging_");
 			return;
 		}
 		String name = root.toString();
@@ -340,6 +357,23 @@ public final class BlockTextures {
 							}
 						} catch (IOException ignored) {
 						}
+					} else if (path.startsWith("assets/minecraft/textures/entity/signs/") && path.endsWith(".png")) {
+						String rest = path.substring("assets/minecraft/textures/entity/signs/".length(), path.length() - 4);
+						String key;
+						if (rest.startsWith("hanging/") && !rest.substring(8).contains("/")) {
+							key = "entity_sign_hanging_" + rest.substring(8);
+						} else if (!rest.contains("/")) {
+							key = "entity_sign_" + rest;
+						} else {
+							continue;
+						}
+						try (InputStream in = zip.getInputStream(entry)) {
+							BufferedImage image = ImageIO.read(in);
+							if (image != null) {
+								CACHE.put(key, image);
+							}
+						} catch (IOException ignored) {
+						}
 					}
 				}
 			}
@@ -348,6 +382,24 @@ public final class BlockTextures {
 		try (FileSystem fs = FileSystems.newFileSystem(root)) {
 			loadFromPath(fs.getPath("/"));
 		} catch (Exception ignored) {
+		}
+	}
+
+	private static void loadSignDir(Path dir, String prefix) throws IOException {
+		if (!Files.isDirectory(dir)) {
+			return;
+		}
+		try (var stream = Files.list(dir)) {
+			stream.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".png")).forEach(p -> {
+				try (InputStream in = Files.newInputStream(p)) {
+					BufferedImage image = ImageIO.read(in);
+					if (image != null) {
+						String filename = p.getFileName().toString();
+						CACHE.put(prefix + filename.substring(0, filename.length() - 4), image);
+					}
+				} catch (IOException ignored) {
+				}
+			});
 		}
 	}
 
