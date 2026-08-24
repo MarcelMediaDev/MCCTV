@@ -465,8 +465,9 @@ public final class BlockModels {
 		float x = p[0] - 8, y = p[1] - 8, z = p[2] - 8;
 		int rx = Math.floorMod(rotX / 90, 4);
 		int ry = Math.floorMod(rotY / 90, 4);
+		// Vanilla blockstate x/y are -X then -Y around the block center.
 		for (int i = 0; i < rx; i++) {
-			float ny = -z, nz = y;
+			float ny = z, nz = -y;
 			y = ny;
 			z = nz;
 		}
@@ -486,10 +487,10 @@ public final class BlockModels {
 		int ry = Math.floorMod(rotY / 90, 4);
 		for (int i = 0; i < rx; i++) {
 			d = switch (d) {
-				case "up" -> "south";
-				case "south" -> "down";
-				case "down" -> "north";
-				case "north" -> "up";
+				case "up" -> "north";
+				case "north" -> "down";
+				case "down" -> "south";
+				case "south" -> "up";
 				default -> d;
 			};
 		}
