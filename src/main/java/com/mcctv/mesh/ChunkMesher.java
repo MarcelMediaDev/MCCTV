@@ -156,7 +156,8 @@ public final class ChunkMesher {
 		if (voxel.air()) {
 			return;
 		}
-		List<BlockModels.BakedQuad> quads = BlockModels.bake(voxel.id(), voxel.props());
+		List<BlockModels.BakedQuad> quads = BlockModels.bake(
+				voxel.id(), voxel.props(), snapshot.minX + x, snapshot.minY + y, snapshot.minZ + z);
 		if (!quads.isEmpty()) {
 			emitModel(snapshot, book, verts, x, y, z, voxel, quads);
 			return;
