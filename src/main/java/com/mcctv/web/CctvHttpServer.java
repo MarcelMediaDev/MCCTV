@@ -11,6 +11,7 @@ import com.mcctv.camera.PlayerAuth;
 import com.mcctv.mesh.BlockTextures;
 import com.mcctv.mesh.EquipmentTextures;
 import com.mcctv.mesh.ItemTextures;
+import com.mcctv.mesh.MobTextures;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -206,6 +207,10 @@ public class CctvHttpServer {
 				sendBytes(ctx, request, HttpResponseStatus.OK, "image/png", CctvHttpServer.this.asciiFont);
 				return;
 			}
+			if (path.startsWith("/api/mob/")) {
+				this.apiMob(ctx, request, path.substring("/api/mob/".length()));
+				return;
+			}
 			if (path.startsWith("/api/item/")) {
 				this.apiItem(ctx, request, path.substring("/api/item/".length()));
 				return;
@@ -324,6 +329,15 @@ public class CctvHttpServer {
 			}
 			CctvHttpServer.this.sessions.dropCamera(gone.get());
 			send(ctx, request, HttpResponseStatus.OK, "application/json", "{\"ok\":true}");
+		}
+
+		private void apiMob(ChannelHandlerContext ctx, FullHttpRequest request, String name) {
+			byte[] png = MobTextures.png(name);
+			if (png.length == 0) {
+				send(ctx, request, HttpResponseStatus.NOT_FOUND, "text/plain", "No mob");
+				return;
+			}
+			sendBytes(ctx, request, HttpResponseStatus.OK, "image/png", png);
 		}
 
 		private void apiItem(ChannelHandlerContext ctx, FullHttpRequest request, String name) {
