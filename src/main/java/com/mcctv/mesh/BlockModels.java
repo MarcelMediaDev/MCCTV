@@ -13,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.random.Random;
 
 public final class BlockModels {
 	public record BakedQuad(float[][] corners, float[][] uvs, String texture, int tint, String cull, boolean shade) {
@@ -21,17 +23,25 @@ public final class BlockModels {
 	private static final Map<String, JsonObject> BLOCKSTATES = new HashMap<>();
 	private static final Map<String, JsonObject> MODELS = new HashMap<>();
 	private static final Map<String, List<BakedQuad>> BAKE = new ConcurrentHashMap<>();
+	private static final ThreadLocal<Random> VARIANT_RANDOM = ThreadLocal.withInitial(() -> Random.create(0L));
 	private static boolean loaded;
 
 	private BlockModels() {
 	}
 
 	public static List<BakedQuad> bake(String id, String props) {
+		return bake(id, props, 0, 0, 0);
+	}
+
+	public static List<BakedQuad> bake(String id, String props, int wx, int wy, int wz) {
 		ensureLoaded();
 		if (id == null || id.isEmpty() || id.equals("air")) {
 			return List.of();
 		}
-		return BAKE.computeIfAbsent(id + "|" + props, ignored -> bakeUncached(id, parseProps(props)));
+		Map<String, String> parsed = parseProps(props);
+		int slots = variantSlots(id, parsed);
+		int pick = variantPick(wx, wy, wz, slots);
+		return BAKE.computeIfAbsent(id + "|" + props + "|" + pick, ignored -> bakeUncached(id, parsed, pick));
 	}
 
 	public static String particleTexture(String id) {
@@ -96,7 +106,7 @@ public final class BlockModels {
 		return map;
 	}
 
-	private static List<BakedQuad> bakeUncached(String id, Map<String, String> props) {
+	private static List<BakedQuad> bakeUncached(String id, Map<String, String> props, int pick) {
 		JsonObject blockstate = BLOCKSTATES.get(id);
 		if (blockstate == null) {
 			return List.of();
@@ -108,7 +118,7 @@ public final class BlockModels {
 				if (part.has("when") && !whenMatches(part.get("when"), props)) {
 					continue;
 				}
-				addApply(poses, part.get("apply"));
+				addApply(poses, part.get("apply"), pick);
 			}
 		} else if (blockstate.has("variants")) {
 			JsonObject variants = blockstate.getAsJsonObject("variants");
@@ -122,8 +132,11 @@ public final class BlockModels {
 				}
 			}
 			if (best != null) {
-				addApply(poses, best);
+				addApply(poses, best, pick);
 			}
+		}
+		if (id.equals("lily_pad")) {
+			poses.replaceAll(p -> new ModelPose(p.model(), p.x(), p.y() + 180, p.uvlock()));
 		}
 		List<BakedQuad> quads = new ArrayList<>();
 		for (ModelPose pose : poses) {
@@ -206,14 +219,73 @@ public final class BlockModels {
 		return true;
 	}
 
-	private static void addApply(List<ModelPose> poses, JsonElement apply) {
+	private static int variantSlots(String id, Map<String, String> props) {
+		JsonObject blockstate = BLOCKSTATES.get(id);
+		if (blockstate == null || !blockstate.has("variants")) {
+			return 1;
+		}
+		JsonObject variants = blockstate.getAsJsonObject("variants");
+		JsonElement best = variants.get("");
+		int bestScore = -1;
+		for (var entry : variants.entrySet()) {
+			int score = variantScore(entry.getKey(), props);
+			if (score > bestScore) {
+				bestScore = score;
+				best = entry.getValue();
+			}
+		}
+		if (best == null || !best.isJsonArray()) {
+			return 1;
+		}
+		int total = 0;
+		for (JsonElement el : best.getAsJsonArray()) {
+			total += weightOf(el);
+		}
+		return Math.max(1, total);
+	}
+
+	private static int variantPick(int x, int y, int z, int slots) {
+		if (slots <= 1) {
+			return 0;
+		}
+		Random random = VARIANT_RANDOM.get();
+		random.setSeed(MathHelper.hashCode(x, y, z));
+		return random.nextInt(slots);
+	}
+
+	private static JsonElement pickWeighted(JsonArray array, int pick) {
+		int total = 0;
+		for (JsonElement el : array) {
+			total += weightOf(el);
+		}
+		if (total <= 0) {
+			return array.get(0);
+		}
+		int i = Math.floorMod(pick, total);
+		for (JsonElement el : array) {
+			i -= weightOf(el);
+			if (i < 0) {
+				return el;
+			}
+		}
+		return array.get(0);
+	}
+
+	private static int weightOf(JsonElement el) {
+		if (el != null && el.isJsonObject() && el.getAsJsonObject().has("weight")) {
+			return Math.max(1, el.getAsJsonObject().get("weight").getAsInt());
+		}
+		return 1;
+	}
+
+	private static void addApply(List<ModelPose> poses, JsonElement apply, int pick) {
 		if (apply == null) {
 			return;
 		}
 		if (apply.isJsonArray()) {
 			JsonArray array = apply.getAsJsonArray();
 			if (!array.isEmpty()) {
-				addApply(poses, array.get(0));
+				addApply(poses, pickWeighted(array, pick), pick);
 			}
 			return;
 		}
@@ -327,6 +399,9 @@ public final class BlockModels {
 				continue;
 			}
 			if (degenerateFace(dir, x0, y0, z0, x1, y1, z1)) {
+				continue;
+			}
+			if ("down".equals(dir) && Math.abs(y1 - y0) < 0.01f) {
 				continue;
 			}
 			float[][] corners = faceCorners(x0, y0, z0, x1, y1, z1, dir);
@@ -465,8 +540,9 @@ public final class BlockModels {
 		float x = p[0] - 8, y = p[1] - 8, z = p[2] - 8;
 		int rx = Math.floorMod(rotX / 90, 4);
 		int ry = Math.floorMod(rotY / 90, 4);
+		// Vanilla blockstate x/y are -X then -Y around the block center.
 		for (int i = 0; i < rx; i++) {
-			float ny = -z, nz = y;
+			float ny = z, nz = -y;
 			y = ny;
 			z = nz;
 		}
@@ -486,10 +562,10 @@ public final class BlockModels {
 		int ry = Math.floorMod(rotY / 90, 4);
 		for (int i = 0; i < rx; i++) {
 			d = switch (d) {
-				case "up" -> "south";
-				case "south" -> "down";
-				case "down" -> "north";
-				case "north" -> "up";
+				case "up" -> "north";
+				case "north" -> "down";
+				case "down" -> "south";
+				case "south" -> "up";
 				default -> d;
 			};
 		}
