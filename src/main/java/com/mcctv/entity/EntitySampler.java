@@ -3,6 +3,7 @@ package com.mcctv.entity;
 import com.mcctv.CctvConfig;
 import com.mcctv.camera.CameraRecord;
 import com.mcctv.mesh.SkyAppearance;
+import com.mcctv.mesh.MobTextures;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.block.Block;
@@ -15,6 +16,35 @@ import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.decoration.ItemFrameEntity;
+import net.minecraft.block.Oxidizable;
+import net.minecraft.entity.mob.BoggedEntity;
+import net.minecraft.entity.mob.ShulkerEntity;
+import net.minecraft.entity.mob.ZombieVillagerEntity;
+import net.minecraft.entity.passive.StriderEntity;
+import net.minecraft.entity.passive.AxolotlEntity;
+import net.minecraft.entity.passive.BatEntity;
+import net.minecraft.entity.passive.BeeEntity;
+import net.minecraft.entity.passive.CatEntity;
+import net.minecraft.entity.passive.ChickenEntity;
+import net.minecraft.entity.passive.CopperGolemEntity;
+import net.minecraft.entity.passive.FoxEntity;
+import net.minecraft.entity.passive.FrogEntity;
+import net.minecraft.entity.passive.IronGolemEntity;
+import net.minecraft.entity.passive.LlamaEntity;
+import net.minecraft.entity.passive.MooshroomEntity;
+import net.minecraft.entity.passive.PandaEntity;
+import net.minecraft.entity.passive.ParrotEntity;
+import net.minecraft.entity.passive.PufferfishEntity;
+import net.minecraft.entity.passive.RabbitEntity;
+import net.minecraft.entity.passive.SalmonEntity;
+import net.minecraft.entity.passive.SheepEntity;
+import net.minecraft.entity.passive.TropicalFishEntity;
+import net.minecraft.entity.passive.TurtleEntity;
+import net.minecraft.entity.passive.SnowGolemEntity;
+import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.entity.passive.WanderingTraderEntity;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.village.VillagerData;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.ItemStack;
@@ -24,6 +54,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Properties;
 import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.DyeColor;
@@ -59,6 +90,7 @@ public final class EntitySampler {
 			json.addProperty("yaw", entity.getYaw());
 			json.addProperty("pitch", entity.getPitch());
 			json.addProperty("bodyYaw", entity.getBodyYaw());
+			json.addProperty("headYaw", entity.getHeadYaw());
 			json.addProperty("sneaking", entity.isInSneakingPose());
 			json.addProperty("pose", entity.getPose().asString());
 			json.addProperty("limb", entity.limbAnimator.getAnimationProgress());
@@ -92,8 +124,80 @@ public final class EntitySampler {
 				json.add("armor", armorJson(player));
 				players.add(json);
 			} else {
-				json.addProperty("type", entity.getType().getTranslationKey());
+				String type = Registries.ENTITY_TYPE.getId(entity.getType()).getPath();
+				json.addProperty("uuid", entity.getUuidAsString());
+				json.addProperty("type", type);
+				json.addProperty("tex", skinOf(entity, type));
 				json.addProperty("name", entity.getName().getString());
+				json.addProperty("baby", entity.isBaby());
+				json.addProperty("w", entity.getWidth());
+				json.addProperty("h", entity.getHeight());
+				if (entity instanceof SheepEntity sheep) {
+					json.addProperty("sheared", sheep.isSheared());
+					json.addProperty("wool", woolHex(sheep.getColor()));
+				}
+				if (entity instanceof BoggedEntity bogged) {
+					json.addProperty("sheared", bogged.isSheared());
+				}
+				if (entity instanceof ChickenEntity chicken) {
+					json.addProperty("flap", chicken.flapProgress);
+					json.addProperty("wing", chicken.maxWingDeviation);
+					json.addProperty("air", !chicken.isOnGround());
+				}
+				if (entity instanceof ParrotEntity parrot) {
+					json.addProperty("flap", parrot.flapProgress);
+					json.addProperty("wing", parrot.maxWingDeviation);
+					json.addProperty("air", parrot.isInAir() && !parrot.hasVehicle());
+				}
+				if (entity instanceof BatEntity bat) {
+					json.addProperty("roost", bat.isRoosting());
+					json.addProperty("air", !bat.isRoosting());
+				}
+				if (entity instanceof BeeEntity bee) {
+					json.addProperty("air", !bee.isOnGround());
+				}
+				if (entity instanceof VillagerEntity villager) {
+					putVillager(json, villager.getVillagerData());
+				}
+				if (entity instanceof ZombieVillagerEntity zombieVillager) {
+					putVillager(json, zombieVillager.getVillagerData());
+				}
+				if (entity instanceof IronGolemEntity golem) {
+					String crack = golem.getCrackLevel().name().toLowerCase();
+					if (!crack.isEmpty() && !"none".equals(crack)) {
+						json.addProperty("crack", crack);
+					}
+				}
+				if (entity instanceof SnowGolemEntity snow) {
+					json.addProperty("pumpkin", snow.hasPumpkin());
+				}
+				if (entity instanceof PufferfishEntity puffer) {
+					json.addProperty("puff", puffer.getPuffState());
+				}
+				if (entity instanceof SalmonEntity salmon) {
+					json.addProperty("scale", salmon.getVariantScale());
+				}
+				if (entity instanceof TropicalFishEntity fish) {
+					boolean large = fish.getVariety().getSize() == TropicalFishEntity.Size.LARGE;
+					json.addProperty("fishSize", large ? "large" : "small");
+					json.addProperty("fishPat", fish.getVariety().getIndex());
+					json.addProperty("baseCol", dyeHex(fish.getBaseColor()));
+					json.addProperty("patCol", dyeHex(fish.getPatternColor()));
+				}
+				if (entity instanceof TurtleEntity turtle) {
+					json.addProperty("egg", turtle.hasEgg());
+				}
+				ItemStack held = ItemStack.EMPTY;
+				if (entity instanceof WanderingTraderEntity || entity.isUsingItem()) {
+					held = entity.getActiveItem();
+				}
+				if (held.isEmpty()) {
+					held = entity.getEquippedStack(EquipmentSlot.MAINHAND);
+				}
+				if (!held.isEmpty()) {
+					json.add("hand", stackJson(world, held));
+					json.addProperty("using", entity.isUsingItem());
+				}
 				mobs.add(json);
 			}
 		}
@@ -108,6 +212,157 @@ public final class EntitySampler {
 		root.addProperty("count", entities.size());
 		SkyAppearance.capture(world, eye.x, eye.y, eye.z, config.viewDistance).writeJson(root);
 		return root;
+	}
+
+	private static String skinOf(LivingEntity entity, String type) {
+		if (entity instanceof CatEntity cat) {
+			String key = assetTex(cat.getVariant().value().assetInfo().id());
+			if (!key.isEmpty()) {
+				return MobTextures.guess(key);
+			}
+		}
+		if (entity instanceof ParrotEntity parrot) {
+			String id = parrot.getVariant().asString();
+			if ("gray".equals(id)) {
+				id = "grey";
+			}
+			return MobTextures.guess("parrot/parrot_" + id);
+		}
+		if (entity instanceof FoxEntity fox) {
+			String base = "snow".equals(fox.getVariant().asString()) ? "fox/snow_fox" : "fox/fox";
+			if (fox.isSleeping()) {
+				base += "_sleep";
+			}
+			return MobTextures.guess(base);
+		}
+		if (entity instanceof LlamaEntity llama) {
+			return MobTextures.guess("llama/" + llama.getVariant().asString());
+		}
+		if (entity instanceof PandaEntity panda) {
+			String gene = panda.getProductGene().asString();
+			if ("normal".equals(gene)) {
+				return MobTextures.guess("panda/panda");
+			}
+			return MobTextures.guess("panda/" + gene + "_panda");
+		}
+		if (entity instanceof BeeEntity bee) {
+			boolean angry = bee.hasAngerTime();
+			boolean nectar = bee.hasNectar();
+			if (angry && nectar) {
+				return MobTextures.guess("bee/bee_angry_nectar");
+			}
+			if (angry) {
+				return MobTextures.guess("bee/bee_angry");
+			}
+			if (nectar) {
+				return MobTextures.guess("bee/bee_nectar");
+			}
+			return MobTextures.guess("bee/bee");
+		}
+		if (entity instanceof RabbitEntity rabbit) {
+			net.minecraft.text.Text named = rabbit.getCustomName();
+			if (named != null && "Toast".equals(named.getString())) {
+				return MobTextures.guess("rabbit/toast");
+			}
+			String id = rabbit.getVariant().asString();
+			if ("evil".equals(id)) {
+				return MobTextures.guess("rabbit/caerbannog");
+			}
+			return MobTextures.guess("rabbit/" + id);
+		}
+		if (entity instanceof MooshroomEntity mooshroom) {
+			String id = mooshroom.getVariant().asString();
+			if ("brown".equals(id)) {
+				return MobTextures.guess("cow/brown_mooshroom");
+			}
+			return MobTextures.guess("cow/red_mooshroom");
+		}
+		if (entity instanceof CopperGolemEntity copper) {
+			Oxidizable.OxidationLevel ox = copper.getOxidationLevel();
+			if (ox == Oxidizable.OxidationLevel.EXPOSED) {
+				return MobTextures.guess("copper_golem/exposed_copper_golem");
+			}
+			if (ox == Oxidizable.OxidationLevel.WEATHERED) {
+				return MobTextures.guess("copper_golem/weathered_copper_golem");
+			}
+			if (ox == Oxidizable.OxidationLevel.OXIDIZED) {
+				return MobTextures.guess("copper_golem/oxidized_copper_golem");
+			}
+			return MobTextures.guess("copper_golem/copper_golem");
+		}
+		if (entity instanceof ShulkerEntity shulker) {
+			DyeColor color = shulker.getColor();
+			if (color != null) {
+				return MobTextures.guess("shulker/shulker_" + color.asString());
+			}
+			return MobTextures.guess("shulker/shulker");
+		}
+		if (entity instanceof StriderEntity strider) {
+			return MobTextures.guess(strider.isCold() ? "strider/strider_cold" : "strider/strider");
+		}
+		if (entity instanceof AxolotlEntity axolotl) {
+			return MobTextures.guess("axolotl/axolotl_" + axolotl.getVariant().asString());
+		}
+		if (entity instanceof FrogEntity frog) {
+			return MobTextures.guess("frog/" + entryPath(frog.getVariant(), "temperate") + "_frog");
+		}
+		if (entity instanceof TropicalFishEntity fish) {
+			boolean large = fish.getVariety().getSize() == TropicalFishEntity.Size.LARGE;
+			return MobTextures.guess(large ? "fish/tropical_b" : "fish/tropical_a");
+		}
+		return MobTextures.guess(type);
+	}
+
+	private static void putVillager(JsonObject json, VillagerData data) {
+		json.addProperty("vType", entryPath(data.type(), "plains"));
+		json.addProperty("vJob", entryPath(data.profession(), "none"));
+		int level = data.level();
+		if (level >= 2 && level <= 6) {
+			String[] badges = { "", "stone", "iron", "gold", "emerald", "diamond" };
+			json.addProperty("vLevel", badges[Math.min(level, 5)]);
+		}
+	}
+
+	private static String entryPath(RegistryEntry<?> entry, String fallback) {
+		if (entry == null) {
+			return fallback;
+		}
+		return entry.getKey().map(key -> key.getValue().getPath()).orElse(fallback);
+	}
+
+	private static String assetTex(Identifier id) {
+		if (id == null) {
+			return "";
+		}
+		String path = id.getPath();
+		if (path.startsWith("textures/entity/")) {
+			path = path.substring("textures/entity/".length());
+		} else if (path.startsWith("entity/")) {
+			path = path.substring("entity/".length());
+		}
+		if (path.endsWith(".png")) {
+			path = path.substring(0, path.length() - 4);
+		}
+		return path;
+	}
+
+	private static String dyeHex(DyeColor dye) {
+		if (dye == null) {
+			return "FFFFFF";
+		}
+		int rgb = dye.getEntityColor();
+		return String.format("%06X", rgb & 0xFFFFFF);
+	}
+
+	private static String woolHex(DyeColor dye) {
+		if (dye == null || dye == DyeColor.WHITE) {
+			return "E6E6E6";
+		}
+		int rgb = dye.getEntityColor();
+		int r = (int) (((rgb >> 16) & 255) * 0.75f);
+		int g = (int) (((rgb >> 8) & 255) * 0.75f);
+		int b = (int) ((rgb & 255) * 0.75f);
+		return String.format("%06X", (r << 16) | (g << 8) | b);
 	}
 
 	private static JsonArray sampleFrames(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {

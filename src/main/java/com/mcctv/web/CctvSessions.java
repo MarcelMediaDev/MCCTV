@@ -512,6 +512,14 @@ public class CctvSessions {
 					}
 				}
 			}
+			if (payload.has("mobs")) {
+				for (var el : payload.getAsJsonArray("mobs")) {
+					JsonObject mob = el.getAsJsonObject();
+					if (mob.has("hand")) {
+						assignTile(book, mob.getAsJsonObject("hand"));
+					}
+				}
+			}
 		}
 		String json = payload.toString();
 		for (Channel channel : channels) {
