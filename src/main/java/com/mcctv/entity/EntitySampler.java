@@ -75,8 +75,8 @@ public final class EntitySampler {
 	}
 
 	public static JsonObject sample(ServerWorld world, CameraRecord camera, CctvConfig config) {
-		Vec3d look = Vec3d.fromPolar(camera.pitch(), camera.yaw());
-		Vec3d eye = new Vec3d(camera.x() + 0.5 + look.x * 0.55, camera.y() + 0.5, camera.z() + 0.5 + look.z * 0.55);
+		Vec3d look = camera.look();
+		Vec3d eye = camera.eye();
 		double range = config.viewDistance;
 		Box box = new Box(eye, eye).expand(range);
 		List<LivingEntity> entities = world.getEntitiesByClass(LivingEntity.class, box, entity -> visible(world, camera, eye, look, entity, range));

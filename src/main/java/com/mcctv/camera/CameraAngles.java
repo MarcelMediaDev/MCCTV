@@ -12,6 +12,12 @@ public final class CameraAngles {
 		if (state.contains(Properties.HORIZONTAL_FACING)) {
 			return yaw(state.get(Properties.HORIZONTAL_FACING));
 		}
+		if (state.contains(Properties.FACING)) {
+			Direction facing = state.get(Properties.FACING);
+			if (facing.getAxis().isHorizontal()) {
+				return yaw(facing);
+			}
+		}
 		if (state.contains(Properties.ROTATION)) {
 			return state.get(Properties.ROTATION) * 22.5f;
 		}
@@ -30,6 +36,16 @@ public final class CameraAngles {
 
 	public static float pitch(BlockState state) {
 		if (state.contains(Properties.HORIZONTAL_FACING)) {
+			return 0f;
+		}
+		if (state.contains(Properties.FACING)) {
+			Direction facing = state.get(Properties.FACING);
+			if (facing == Direction.DOWN) {
+				return 90f;
+			}
+			if (facing == Direction.UP) {
+				return -90f;
+			}
 			return 0f;
 		}
 		return 15f;
