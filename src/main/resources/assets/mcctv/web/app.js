@@ -428,7 +428,8 @@ function classifyTiles() {
 				if (a > 28 && a < 242) mid++;
 			}
 		}
-		if (mid > 4) kinds[t] = 2;
+		if (maxA < 28) kinds[t] = 1;
+		else if (mid > 4) kinds[t] = 2;
 		else if (minA < 28 && maxA > 28) kinds[t] = 1;
 		else kinds[t] = 0;
 	}

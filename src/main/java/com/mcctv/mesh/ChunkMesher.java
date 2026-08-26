@@ -1,5 +1,6 @@
 package com.mcctv.mesh;
 
+import net.minecraft.block.RedstoneWireBlock;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
@@ -266,6 +267,9 @@ public final class ChunkMesher {
 	}
 
 	private static int tintOf(WorldSnapshot.Voxel voxel, String texture) {
+		if (voxel.id().equals("redstone_wire") || texture.contains("redstone_dust")) {
+			return RedstoneWireBlock.getWireColor(redstonePower(voxel.props()));
+		}
 		if (texture.contains("leaf") || texture.contains("vine") || texture.contains("lily")) {
 			return voxel.foliage();
 		}
@@ -273,6 +277,33 @@ public final class ChunkMesher {
 			return voxel.water();
 		}
 		return voxel.grass();
+	}
+
+	private static int redstonePower(String props) {
+		if (props == null) {
+			return 0;
+		}
+		int i = props.indexOf("power=");
+		if (i < 0) {
+			return 0;
+		}
+		int start = i + 6;
+		int end = start;
+		while (end < props.length()) {
+			char c = props.charAt(end);
+			if (c < '0' || c > '9') {
+				break;
+			}
+			end++;
+		}
+		if (end == start) {
+			return 0;
+		}
+		try {
+			return MathHelper.clamp(Integer.parseInt(props.substring(start, end)), 0, 15);
+		} catch (NumberFormatException e) {
+			return 0;
+		}
 	}
 
 	private static float modelShade(boolean shade, float[][] corners) {
