@@ -2,6 +2,7 @@ package com.mcctv.entity;
 
 import com.mcctv.CctvConfig;
 import com.mcctv.camera.CameraRecord;
+import com.mcctv.mesh.ChestLids;
 import com.mcctv.mesh.SkyAppearance;
 import com.mcctv.mesh.MobTextures;
 import com.google.gson.JsonArray;
@@ -231,6 +232,7 @@ public final class EntitySampler {
 		root.add("fireworks", sampleFireworks(world, camera, eye, look, range));
 		root.add("frames", sampleFrames(world, camera, eye, look, range));
 		root.add("signs", sampleSigns(world, camera, eye, look, range));
+		root.add("chests", ChestLids.sampleNear(world, camera.x(), camera.y(), camera.z(), (int) range));
 		root.addProperty("count", entities.size());
 		SkyAppearance.capture(world, eye.x, eye.y, eye.z, config.viewDistance).writeJson(root);
 		return root;

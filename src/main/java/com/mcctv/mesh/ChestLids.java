@@ -1,44 +1,29 @@
 package com.mcctv.mesh;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.ChestBlockEntity;
 import net.minecraft.block.entity.EnderChestBlockEntity;
 import net.minecraft.block.entity.LidOpenable;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Properties;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.chunk.WorldChunk;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 public final class ChestLids {
-	private static final Map<String, Integer> PROGRESS = new ConcurrentHashMap<>();
-	private static final Set<String> STEPPED = new HashSet<>();
-	private static final Set<String> CHANGED = new HashSet<>();
-
 	private ChestLids() {
-	}
-
-	public static void beginTick() {
-		STEPPED.clear();
-		CHANGED.clear();
 	}
 
 	static boolean tracks(String id) {
 		return id.contains("chest") && !id.contains("boat") && !id.contains("minecart") && !id.contains("cart");
 	}
 
-	static int progress(ServerWorld world, BlockPos pos) {
-		return PROGRESS.getOrDefault(key(world, pos), 0);
-	}
-
-	public static List<BlockPos> tickNear(ServerWorld world, int x, int y, int z, int range) {
-		List<BlockPos> changed = new ArrayList<>();
+	public static JsonArray sampleNear(ServerWorld world, int x, int y, int z, int range) {
+		JsonArray chests = new JsonArray();
 		int limit = (range + 8) * (range + 8);
 		int minCx = (x - range - 8) >> 4;
 		int maxCx = (x + range + 8) >> 4;
@@ -61,31 +46,28 @@ public final class ChestLids {
 					if (dx * dx + dy * dy + dz * dz > limit) {
 						continue;
 					}
-					if (step(world, pos, be)) {
-						changed.add(pos.toImmutable());
+					BlockState state = be.getCachedState();
+					String id = Registries.BLOCK.getId(state.getBlock()).getPath();
+					if (!tracks(id)) {
+						continue;
 					}
+					String facing = "south";
+					if (state.contains(Properties.HORIZONTAL_FACING)) {
+						facing = state.get(Properties.HORIZONTAL_FACING).asString();
+					}
+					JsonObject json = new JsonObject();
+					json.addProperty("uuid", "chest:" + pos.getX() + "," + pos.getY() + "," + pos.getZ());
+					json.addProperty("x", pos.getX());
+					json.addProperty("y", pos.getY());
+					json.addProperty("z", pos.getZ());
+					json.addProperty("open", isViewed(world, be));
+					json.addProperty("facing", facing);
+					json.addProperty("rotY", EntityBlockMeshes.facingYaw(facing));
+					chests.add(json);
 				}
 			}
 		}
-		return changed;
-	}
-
-	private static boolean step(ServerWorld world, BlockPos pos, BlockEntity be) {
-		String k = key(world, pos);
-		if (STEPPED.add(k)) {
-			boolean open = isViewed(world, be);
-			int cur = PROGRESS.getOrDefault(k, 0);
-			int next = open ? Math.min(10, cur + 1) : Math.max(0, cur - 1);
-			if (next == 0) {
-				PROGRESS.remove(k);
-			} else {
-				PROGRESS.put(k, next);
-			}
-			if (next != cur) {
-				CHANGED.add(k);
-			}
-		}
-		return CHANGED.contains(k);
+		return chests;
 	}
 
 	private static boolean isViewed(ServerWorld world, BlockEntity be) {
@@ -100,9 +82,5 @@ public final class ChestLids {
 			}
 		}
 		return false;
-	}
-
-	private static String key(ServerWorld world, BlockPos pos) {
-		return world.getRegistryKey().getValue() + ":" + pos.asLong();
 	}
 }
