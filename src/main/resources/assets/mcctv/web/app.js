@@ -161,6 +161,17 @@ fetch("/api/destroy.png").then(r => r.ok ? r.blob() : Promise.reject()).then(blo
 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
 	crackTex.ready = true;
 }).catch(() => { crackTex.ready = false; });
+const sparkTex = { tex: gl.createTexture(), ready: false };
+gl.bindTexture(gl.TEXTURE_2D, sparkTex.tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+fetch("/api/particle/spark_7.png").then(r => r.ok ? r : fetch("/api/particle/spark_0.png")).then(r => r.ok ? r.blob() : Promise.reject()).then(blob => createImageBitmap(blob)).then(img => {
+	gl.bindTexture(gl.TEXTURE_2D, sparkTex.tex);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+	sparkTex.ready = true;
+}).catch(() => { sparkTex.ready = false; });
 
 function mat4() { return new Float32Array(16); }
 function identity(m) {
@@ -333,7 +344,8 @@ function ingestEntities(list, kind) {
 			localSwing: startSwing ? 0 : (prev ? prev.localSwing : 0),
 			flap: prev && prev.flap != null ? prev.flap : e.flap,
 			wing: prev && prev.wing != null ? prev.wing : e.wing,
-			flapSpeed: prev && prev.flapSpeed != null ? prev.flapSpeed : 1
+			flapSpeed: prev && prev.flapSpeed != null ? prev.flapSpeed : 1,
+			trailAcc: prev && prev.trailAcc != null ? prev.trailAcc : 0
 		}));
 	}
 	for (const id of [...poses.keys()]) {
@@ -345,6 +357,7 @@ function tickPoses(dt) {
 	const playersOut = [];
 	const mobsOut = [];
 	const tntOut = [];
+	const fireworksOut = [];
 	const framesOut = [];
 	const signsOut = [];
 	const chestsOut = [];
@@ -367,6 +380,16 @@ function tickPoses(dt) {
 		const bps = dt > 1e-4 ? dist / dt : 0;
 		const targetAmt = Math.min(1, bps / 5);
 		st.amt += (targetAmt - st.amt) * Math.min(1, dt * 8);
+		if (st.kind === "firework") {
+			const vx = (nx - st.x) / Math.max(dt, 1e-4);
+			const vy = (ny - st.y) / Math.max(dt, 1e-4);
+			const vz = (nz - st.z) / Math.max(dt, 1e-4);
+			st.trailAcc = (st.trailAcc || 0) + dt;
+			while (st.trailAcc >= 0.05) {
+				st.trailAcc -= 0.05;
+				spawnFireworkTrail(st, nx, ny, nz, vx, vy, vz);
+			}
+		}
 		st.x = nx;
 		st.y = ny;
 		st.z = nz;
@@ -387,10 +410,11 @@ function tickPoses(dt) {
 		if (st.kind === "player") playersOut.push(st);
 		else if (st.kind === "mob") mobsOut.push(st);
 		else if (st.kind === "tnt") tntOut.push(st);
+		else if (st.kind === "firework") fireworksOut.push(st);
 		else if (st.kind === "frame") framesOut.push(st);
 		else if (st.kind === "sign") signsOut.push(st);
 	}
-	return { players: playersOut, mobs: mobsOut, tnt: tntOut, frames: framesOut, signs: signsOut, chests: chestsOut };
+	return { players: playersOut, mobs: mobsOut, tnt: tntOut, fireworks: fireworksOut, frames: framesOut, signs: signsOut, chests: chestsOut };
 }
 
 function parseMesh(bytes) {
@@ -785,6 +809,110 @@ function parsePatch(bytes) {
 	stealChestVerts();
 }
 
+function unpackRgb(rgb) {
+	return [((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255];
+}
+
+function fireworkColors(src) {
+	const out = [];
+	for (const boom of src.explosions || []) {
+		for (const rgb of boom.colors || []) out.push(rgb);
+	}
+	if (!out.length) out.push(0xFFAA55, 0xFFFFFF);
+	return out;
+}
+
+function sparkParticle(x, y, z, vx, vy, vz, rgb, life, size, grav, streak) {
+	const col = unpackRgb(rgb);
+	particles.push({
+		x, y, z, vx, vy, vz,
+		life, age: 0,
+		floor: y - 40,
+		size,
+		tile: 0,
+		u0: 0, v0: 0, u1: 1, v1: 1,
+		cr: col[0], cg: col[1], cb: col[2],
+		spark: true,
+		grav: grav != null ? grav : 0.08,
+		bounce: false,
+		drag: 0.91,
+		streak: !!streak,
+		streakAcc: 0
+	});
+}
+
+function gauss() {
+	return Math.random() + Math.random() + Math.random() - 1.5;
+}
+
+function spawnFireworkTrail(st, x, y, z, vx, vy, vz) {
+	sparkParticle(
+		x + gauss() * 0.02,
+		y - 0.3,
+		z + gauss() * 0.02,
+		gauss() * 1.0,
+		-vy * 0.5,
+		gauss() * 1.0,
+		0xE8E8E8,
+		(48 + Math.random() * 12) / 20,
+		0.18 + Math.random() * 0.06,
+		0.08,
+		true
+	);
+}
+
+function rocketPoint(st, lx, ly, lz) {
+	const s = 0.5;
+	let x = (lx / 16 - 0.5) * s;
+	let y = (ly / 16 - 0.5) * s;
+	let z = (lz / 16 - 0.5) * s;
+	let vx = (st.to && st.from) ? st.to.x - st.from.x : (st.vx || 0);
+	let vy = (st.to && st.from) ? st.to.y - st.from.y : (st.vy || 0);
+	let vz = (st.to && st.from) ? st.to.z - st.from.z : (st.vz || 0);
+	if (Math.hypot(vx, vy, vz) < 1e-5) {
+		vx = st.vx || 0;
+		vy = st.vy || 0.04;
+		vz = st.vz || 0;
+	}
+	const horiz = Math.hypot(vx, vz);
+	const yaw = Math.atan2(vx, vz);
+	const pitch = Math.atan2(vy, horiz);
+	let p = rotX(x, y, z, Math.PI / 2);
+	p = rotX(p[0], p[1], p[2], -pitch);
+	p = rotY(p[0], p[1], p[2], yaw);
+	return [st.x + p[0], st.y + p[1], st.z + p[2]];
+}
+
+function spawnFireworkBurst(msg) {
+	const booms = msg.explosions && msg.explosions.length ? msg.explosions : [{
+		shape: "small_ball",
+		colors: [0xFFAA55, 0xFF5533],
+		fade: []
+	}];
+	for (const boom of booms) {
+		const shape = boom.shape || "small_ball";
+		const n = shape === "large_ball" ? 140 : shape === "burst" ? 55 : shape === "star" ? 90 : 80;
+		const speed = shape === "large_ball" ? 16 : shape === "burst" ? 20 : 12;
+		const colors = boom.colors && boom.colors.length ? boom.colors : [0xFFAA55];
+		const fade = boom.fade && boom.fade.length ? boom.fade : colors;
+		for (let i = 0; i < n; i++) {
+			let vx = Math.random() * 2 - 1;
+			let vy = Math.random() * 2 - 1;
+			let vz = Math.random() * 2 - 1;
+			const len = Math.hypot(vx, vy, vz) || 1;
+			const s = speed * (0.55 + Math.random() * 0.45);
+			vx = vx / len * s;
+			vy = vy / len * s;
+			vz = vz / len * s;
+			if (shape === "burst") {
+				vy *= 0.35;
+			}
+			const rgb = Math.random() < 0.35 ? fade[(Math.random() * fade.length) | 0] : colors[(Math.random() * colors.length) | 0];
+			sparkParticle(msg.x, msg.y, msg.z, vx, vy, vz, rgb, 0.55 + Math.random() * 0.55, 0.05 + Math.random() * 0.05, 1.4);
+		}
+	}
+}
+
 function spawnBurst(msg) {
 	const x = msg.x, y = msg.y, z = msg.z;
 	const tile = msg.tile || 0;
@@ -825,25 +953,49 @@ function spawnBurst(msg) {
 function tickParticles(dt) {
 	if (!particles.length) return;
 	const next = [];
-	const drag = Math.pow(0.98, dt * 20);
+	const defaultDrag = Math.pow(0.98, dt * 20);
+	const extra = [];
 	for (const p of particles) {
-		p.vy -= 16 * dt;
+		p.vy -= (p.grav != null ? p.grav : 16) * dt;
 		p.x += p.vx * dt;
 		p.y += p.vy * dt;
 		p.z += p.vz * dt;
+		const drag = p.drag != null ? Math.pow(p.drag, dt * 20) : defaultDrag;
 		p.vx *= drag;
 		p.vy *= drag;
 		p.vz *= drag;
-		if (p.y < p.floor) {
+		if (p.bounce !== false && p.y < p.floor) {
 			p.y = p.floor;
 			p.vy *= -0.2;
 			p.vx *= 0.7;
 			p.vz *= 0.7;
 		}
 		p.age += dt;
+		if (p.streak && p.age < p.life * 0.5) {
+			p.streakAcc = (p.streakAcc || 0) + dt;
+			if (p.streakAcc >= 0.1) {
+				p.streakAcc -= 0.1;
+				const fade = 1 - p.age / p.life;
+				extra.push({
+					x: p.x, y: p.y, z: p.z,
+					vx: 0, vy: 0, vz: 0,
+					life: p.life * 0.5, age: p.life * 0.25,
+					floor: p.floor,
+					size: p.size * 0.85,
+					tile: 0,
+					u0: 0, v0: 0, u1: 1, v1: 1,
+					cr: p.cr * fade, cg: p.cg * fade, cb: p.cb * fade,
+					spark: true,
+					grav: 0.08,
+					bounce: false,
+					drag: 0.91,
+					streak: false
+				});
+			}
+		}
 		if (p.age < p.life) next.push(p);
 	}
-	particles = next;
+	particles = next.concat(extra);
 }
 
 function buildSky(eyePos) {
@@ -3630,6 +3782,30 @@ function render() {
 		drawTntCube(tntCubes, st.x, st.y, st.z, 0.98, side, top, bottom, flash, scale);
 	}
 	if (tntCubes.length) draw(new Float32Array(tntCubes), tntCubes.length / 9, mesh ? mesh.tiles : 1, hasAtlas && mesh ? 1 : 0, atlasTex);
+	const rocketSprites = new Map();
+	for (const st of sampled.fireworks || []) {
+		const rec = ensureItem(st.item || "firework_rocket");
+		if (!rec.ready || !rec.mesh) continue;
+		if (!rocketSprites.has(st.item || "firework_rocket")) rocketSprites.set(st.item || "firework_rocket", { rec, data: [] });
+		const data = rocketSprites.get(st.item || "firework_rocket").data;
+		const order = [0, 1, 2, 0, 2, 3];
+		const light = sceneLight();
+		for (const quad of rec.mesh) {
+			const pts = quad.p.map(pt => rocketPoint(st, pt[0], pt[1], pt[2]));
+			for (const i of order) {
+				const uv = quad.uv[i];
+				data.push(pts[i][0], pts[i][1], pts[i][2], uv[0], uv[1], light, light, light, 0);
+			}
+		}
+	}
+	if (rocketSprites.size) {
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		for (const group of rocketSprites.values()) {
+			draw(new Float32Array(group.data), group.data.length / 9, 1, 1, group.rec.tex);
+		}
+		gl.disable(gl.BLEND);
+	}
 	const frameCubes = [];
 	const frameSprites = new Map();
 	for (const st of sampled.frames || []) {
@@ -3762,16 +3938,24 @@ function render() {
 	if (heldCubes.length || heldSprites.size) gl.disable(gl.CULL_FACE);
 	if (particles.length) {
 		const pdata = [];
+		const sparks = [];
 		const axes = cameraAxes();
 		const light = sceneLight();
 		for (const p of particles) {
-			drawParticle(pdata, p, p.size, axes, light);
+			drawParticle(p.spark ? sparks : pdata, p, p.size, axes, light);
 		}
+		gl.depthMask(false);
 		if (pdata.length) {
-			gl.depthMask(false);
 			draw(new Float32Array(pdata), pdata.length / 9, mesh ? mesh.tiles : 1, hasAtlas && mesh ? 1 : 0, atlasTex);
-			gl.depthMask(true);
 		}
+		if (sparks.length) {
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+			draw(new Float32Array(sparks), sparks.length / 9, 1, sparkTex.ready ? 1 : 0, sparkTex.ready ? sparkTex.tex : atlasTex);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			gl.disable(gl.BLEND);
+		}
+		gl.depthMask(true);
 	}
 	if (breaking.length && crackTex.ready) {
 		const crackData = [];
@@ -4030,6 +4214,12 @@ function connect(cam) {
 				ingestEntities(mobs, "mob");
 				ingestEntities(items, "item");
 				ingestEntities(msg.tnt || [], "tnt");
+				const flying = [];
+				for (const rocket of msg.fireworks || []) {
+					if (rocket.burst) spawnFireworkBurst(rocket);
+					else flying.push(rocket);
+				}
+				ingestEntities(flying, "firework");
 				ingestEntities(msg.frames || [], "frame");
 				ingestEntities(msg.signs || [], "sign");
 				ingestEntities(msg.chests || [], "chest");
