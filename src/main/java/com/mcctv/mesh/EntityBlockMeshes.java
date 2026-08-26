@@ -15,10 +15,17 @@ final class EntityBlockMeshes {
 		if (isChest(id)) {
 			return chest(id, props, extraY);
 		}
+		if (isBanner(id)) {
+			return banner(id, props);
+		}
 		if (isSign(id)) {
 			return sign(id, props, extraY);
 		}
 		return List.of();
+	}
+
+	private static boolean isBanner(String id) {
+		return id.endsWith("_banner");
 	}
 
 	private static boolean isSign(String id) {
@@ -116,6 +123,146 @@ final class EntityBlockMeshes {
 			}
 		}
 		return "entity_chest_" + base;
+	}
+
+	private static final float BANNER_SCALE = 2f / 3f;
+
+	private static List<BlockModels.BakedQuad> banner(String id, Map<String, String> props) {
+		boolean wall = id.contains("wall");
+		String tex = BlockTextures.banner(bannerColor(id), props.getOrDefault("layers", ""));
+		float rotY = bannerYaw(props, wall);
+		List<BlockModels.BakedQuad> list = new ArrayList<>();
+		if (wall) {
+			addBannerCuboid(list, -10, -20.5f, 9.5f, 20, 2, 2, tex, 0, 42, rotY);
+			addBannerCuboid(list, -10, -20.5f, 8.5f, 20, 40, 1, tex, 0, 0, rotY);
+		} else {
+			addBannerCuboid(list, -1, -42, -1, 2, 42, 2, tex, 44, 0, rotY);
+			addBannerCuboid(list, -10, -44, -1, 20, 2, 2, tex, 0, 42, rotY);
+			addBannerCuboid(list, -10, -44, -2, 20, 40, 1, tex, 0, 0, rotY);
+		}
+		return list;
+	}
+
+	private static String bannerColor(String id) {
+		String color = id.replace("_wall_banner", "").replace("_banner", "");
+		return color.isEmpty() ? "white" : color;
+	}
+
+	private static float bannerYaw(Map<String, String> props, boolean wall) {
+		if (wall) {
+			return switch (props.getOrDefault("facing", "north")) {
+				case "south" -> 0f;
+				case "west" -> -90f;
+				case "east" -> -270f;
+				default -> -180f;
+			};
+		}
+		int rotation = 0;
+		try {
+			rotation = Integer.parseInt(props.getOrDefault("rotation", "0"));
+		} catch (NumberFormatException ignored) {
+			rotation = 0;
+		}
+		return -rotation * 22.5f;
+	}
+
+	private static void addBannerCuboid(List<BlockModels.BakedQuad> list, float mx, float my, float mz,
+			float dx, float dy, float dz, String tex, int u, int v, float rotY) {
+		float x0 = 8f + mx * BANNER_SCALE;
+		float x1 = 8f + (mx + dx) * BANNER_SCALE;
+		float y0 = -my * BANNER_SCALE;
+		float y1 = -(my + dy) * BANNER_SCALE;
+		float z0 = 8f - mz * BANNER_SCALE;
+		float z1 = 8f - (mz + dz) * BANNER_SCALE;
+		float xa = Math.min(x0, x1);
+		float xb = Math.max(x0, x1);
+		float ya = Math.min(y0, y1);
+		float yb = Math.max(y0, y1);
+		float za = Math.min(z0, z1);
+		float zb = Math.max(z0, z1);
+		int iu = Math.max(1, Math.round(Math.abs(dx)));
+		int iv = Math.max(1, Math.round(Math.abs(dy)));
+		int iz = Math.max(1, Math.round(Math.abs(dz)));
+		addBannerFace(list, "down", xa, ya, za, xb, yb, zb, tex, u + iz, v, iu, iz, rotY);
+		addBannerFace(list, "up", xa, ya, za, xb, yb, zb, tex, u + iz + iu, v, iu, iz, rotY);
+		addBannerFace(list, "west", xa, ya, za, xb, yb, zb, tex, u, v + iz, iz, iv, rotY);
+		addBannerFace(list, "south", xa, ya, za, xb, yb, zb, tex, u + iz, v + iz, iu, iv, rotY);
+		addBannerFace(list, "east", xa, ya, za, xb, yb, zb, tex, u + iz + iu, v + iz, iz, iv, rotY);
+		addBannerFace(list, "north", xa, ya, za, xb, yb, zb, tex, u + iz + iu + iz, v + iz, iu, iv, rotY);
+	}
+
+	private static void addBannerFace(List<BlockModels.BakedQuad> list, String dir, float xa, float ya, float za,
+			float xb, float yb, float zb, String tex, int u, int v, int w, int h, float rotY) {
+		if (w <= 0 || h <= 0) {
+			return;
+		}
+		for (int ou = 0; ou < w; ou += 16) {
+			int cw = Math.min(16, w - ou);
+			for (int ov = 0; ov < h; ov += 16) {
+				int ch = Math.min(16, h - ov);
+				float[] box = bannerSubBox(dir, xa, ya, za, xb, yb, zb, w, h, ou, ov, cw, ch);
+				addFace(list, dir, box[0], box[1], box[2], box[3], box[4], box[5], tex,
+						uv(u + ou, v + ov, cw, ch), rotY, 0f, true);
+			}
+		}
+	}
+
+	private static float[] bannerSubBox(String dir, float xa, float ya, float za, float xb, float yb, float zb,
+			int w, int h, int ou, int ov, int cw, int ch) {
+		float u0 = ou / (float) w;
+		float u1 = (ou + cw) / (float) w;
+		float v0 = ov / (float) h;
+		float v1 = (ov + ch) / (float) h;
+		float nx0 = xa, ny0 = ya, nz0 = za, nx1 = xb, ny1 = yb, nz1 = zb;
+		switch (dir) {
+			case "south" -> {
+				nx0 = xa + u0 * (xb - xa);
+				nx1 = xa + u1 * (xb - xa);
+				ny0 = yb - v1 * (yb - ya);
+				ny1 = yb - v0 * (yb - ya);
+			}
+			case "north" -> {
+				float xA = xb + u0 * (xa - xb);
+				float xB = xb + u1 * (xa - xb);
+				nx0 = Math.min(xA, xB);
+				nx1 = Math.max(xA, xB);
+				ny0 = yb - v1 * (yb - ya);
+				ny1 = yb - v0 * (yb - ya);
+			}
+			case "west" -> {
+				nz0 = za + u0 * (zb - za);
+				nz1 = za + u1 * (zb - za);
+				ny0 = yb - v1 * (yb - ya);
+				ny1 = yb - v0 * (yb - ya);
+			}
+			case "east" -> {
+				float zA = zb + u0 * (za - zb);
+				float zB = zb + u1 * (za - zb);
+				nz0 = Math.min(zA, zB);
+				nz1 = Math.max(zA, zB);
+				ny0 = yb - v1 * (yb - ya);
+				ny1 = yb - v0 * (yb - ya);
+			}
+			case "down" -> {
+				nx0 = xa + u0 * (xb - xa);
+				nx1 = xa + u1 * (xb - xa);
+				float zA = za + v0 * (zb - za);
+				float zB = za + v1 * (zb - za);
+				nz0 = Math.min(zA, zB);
+				nz1 = Math.max(zA, zB);
+			}
+			case "up" -> {
+				nx0 = xa + u0 * (xb - xa);
+				nx1 = xa + u1 * (xb - xa);
+				float zA = zb - v0 * (zb - za);
+				float zB = zb - v1 * (zb - za);
+				nz0 = Math.min(zA, zB);
+				nz1 = Math.max(zA, zB);
+			}
+			default -> {
+			}
+		}
+		return new float[] {nx0, ny0, nz0, nx1, ny1, nz1};
 	}
 
 	private static final float SIGN_SCALE = 2f / 3f;

@@ -5,6 +5,7 @@ import com.mcctv.camera.CameraRecord;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.MapColor;
+import net.minecraft.block.entity.BannerBlockEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -206,6 +207,13 @@ public final class WorldSnapshot {
 		if (ChestLids.tracks(id)) {
 			String lid = "lid=" + ChestLids.progress(world, pos);
 			props = props.isEmpty() ? lid : props + "," + lid;
+		}
+		if (world.getBlockEntity(pos) instanceof BannerBlockEntity banner) {
+			String layers = BlockTextures.bannerLayers(banner);
+			if (!layers.isEmpty()) {
+				String extra = "layers=" + layers;
+				props = props.isEmpty() ? extra : props + "," + extra;
+			}
 		}
 		return new Voxel(
 				false,

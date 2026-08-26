@@ -20,6 +20,9 @@ import javax.imageio.ImageIO;
 import com.mcctv.McCctv;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.minecraft.block.entity.BannerBlockEntity;
+import net.minecraft.component.type.BannerPatternsComponent;
+import net.minecraft.util.DyeColor;
 
 public final class BlockTextures {
 	private static final Map<String, BufferedImage> CACHE = new HashMap<>();
@@ -36,6 +39,99 @@ public final class BlockTextures {
 	public static synchronized Set<String> names() {
 		ensureLoaded();
 		return Set.copyOf(CACHE.keySet());
+	}
+
+	public static String bannerLayers(BannerBlockEntity banner) {
+		if (banner == null) {
+			return "";
+		}
+		BannerPatternsComponent patterns = banner.getPatterns();
+		if (patterns == null || patterns.layers().isEmpty()) {
+			return "";
+		}
+		StringBuilder out = new StringBuilder();
+		int n = Math.min(16, patterns.layers().size());
+		for (int i = 0; i < n; i++) {
+			BannerPatternsComponent.Layer layer = patterns.layers().get(i);
+			if (!out.isEmpty()) {
+				out.append('+');
+			}
+			String pattern = layer.pattern().getKey()
+					.map(key -> key.getValue().getPath())
+					.orElseGet(() -> layer.pattern().value().assetId().getPath());
+			out.append(pattern).append(':').append(layer.color().asString());
+		}
+		return out.toString();
+	}
+
+	public static synchronized String banner(String dye, String layers) {
+		ensureLoaded();
+		if (dye == null || dye.isEmpty()) {
+			dye = "white";
+		}
+		String key = "entity_banner_" + dye;
+		if (layers != null && !layers.isEmpty()) {
+			key += "_" + layers.replace('+', '_').replace(':', '_');
+		}
+		if (CACHE.containsKey(key)) {
+			return key;
+		}
+		BufferedImage sheet = CACHE.get("entity_banner_sheet");
+		if (sheet == null) {
+			return dye + "_wool";
+		}
+		BufferedImage out = copy(sheet);
+		overlayTinted(out, CACHE.get("entity_banner_pattern_base"), entityDye(dye));
+		if (layers != null && !layers.isEmpty()) {
+			for (String part : layers.split("\\+")) {
+				int colon = part.lastIndexOf(':');
+				if (colon <= 0) {
+					continue;
+				}
+				String pattern = part.substring(0, colon);
+				String color = part.substring(colon + 1);
+				overlayTinted(out, CACHE.get("entity_banner_pattern_" + pattern), entityDye(color));
+			}
+		}
+		CACHE.put(key, out);
+		return key;
+	}
+
+	private static int entityDye(String id) {
+		return DyeColor.byId(id, DyeColor.WHITE).getEntityColor();
+	}
+
+	private static void overlayTinted(BufferedImage dst, BufferedImage src, int rgb) {
+		if (dst == null || src == null) {
+			return;
+		}
+		int tr = (rgb >> 16) & 0xFF;
+		int tg = (rgb >> 8) & 0xFF;
+		int tb = rgb & 0xFF;
+		int w = Math.min(dst.getWidth(), src.getWidth());
+		int h = Math.min(dst.getHeight(), src.getHeight());
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				int p = src.getRGB(x, y);
+				int a = (p >>> 24) & 0xFF;
+				if (a == 0) {
+					continue;
+				}
+				int sr = ((p >> 16) & 0xFF) * tr / 255;
+				int sg = ((p >> 8) & 0xFF) * tg / 255;
+				int sb = (p & 0xFF) * tb / 255;
+				int dstp = dst.getRGB(x, y);
+				int da = (dstp >>> 24) & 0xFF;
+				int dr = (dstp >> 16) & 0xFF;
+				int dg = (dstp >> 8) & 0xFF;
+				int db = dstp & 0xFF;
+				int r = (sr * a + dr * (255 - a)) / 255;
+				int g = (sg * a + dg * (255 - a)) / 255;
+				int b = (sb * a + db * (255 - a)) / 255;
+				int alpha = Math.max(da, a);
+				dst.setRGB(x, y, (alpha << 24) | (r << 16) | (g << 8) | b);
+			}
+		}
 	}
 
 	public static synchronized BufferedImage getRaw(String name) {
@@ -301,6 +397,13 @@ public final class BlockTextures {
 				"/assets/mcctv/vanilla/entity-sign-hanging-index.txt",
 				"/assets/mcctv/vanilla/entity/signs/hanging/",
 				"entity_sign_hanging_");
+		bundled += loadPrefixed(
+				"/assets/mcctv/vanilla/entity-banner-index.txt",
+				"/assets/mcctv/vanilla/entity/banner/",
+				"entity_banner_pattern_");
+		bundled += loadNamed(
+				"/assets/mcctv/vanilla/entity/banner_base.png",
+				"entity_banner_sheet");
 		try {
 			ModContainer container = FabricLoader.getInstance().getModContainer("minecraft").orElse(null);
 			if (container != null) {
@@ -312,6 +415,24 @@ public final class BlockTextures {
 			McCctv.LOGGER.warn("Could not index vanilla block textures from Minecraft jar", e);
 		}
 		McCctv.LOGGER.info("MCCTV block textures: {} bundled, {} total", bundled, CACHE.size());
+		for (DyeColor dye : DyeColor.values()) {
+			banner(dye.asString(), "");
+		}
+	}
+
+	private static int loadNamed(String resource, String key) {
+		try (InputStream in = BlockTextures.class.getResourceAsStream(resource)) {
+			if (in == null) {
+				return 0;
+			}
+			BufferedImage image = ImageIO.read(in);
+			if (image != null) {
+				CACHE.put(key, image);
+				return 1;
+			}
+		} catch (IOException ignored) {
+		}
+		return 0;
 	}
 
 	private static int loadPrefixed(String index, String folder, String prefix) {
@@ -333,6 +454,8 @@ public final class BlockTextures {
 			}
 			loadSignDir(root.resolve("assets/minecraft/textures/entity/signs"), "entity_sign_");
 			loadSignDir(root.resolve("assets/minecraft/textures/entity/signs/hanging"), "entity_sign_hanging_");
+			loadPngFile(root.resolve("assets/minecraft/textures/entity/banner_base.png"), "entity_banner_sheet");
+			loadSignDir(root.resolve("assets/minecraft/textures/entity/banner"), "entity_banner_pattern_");
 			return;
 		}
 		String name = root.toString();
@@ -374,6 +497,26 @@ public final class BlockTextures {
 							}
 						} catch (IOException ignored) {
 						}
+					} else if (path.equals("assets/minecraft/textures/entity/banner_base.png")) {
+						try (InputStream in = zip.getInputStream(entry)) {
+							BufferedImage image = ImageIO.read(in);
+							if (image != null) {
+								CACHE.put("entity_banner_sheet", image);
+							}
+						} catch (IOException ignored) {
+						}
+					} else if (path.startsWith("assets/minecraft/textures/entity/banner/") && path.endsWith(".png")) {
+						String rest = path.substring("assets/minecraft/textures/entity/banner/".length(), path.length() - 4);
+						if (rest.contains("/")) {
+							continue;
+						}
+						try (InputStream in = zip.getInputStream(entry)) {
+							BufferedImage image = ImageIO.read(in);
+							if (image != null) {
+								CACHE.put("entity_banner_pattern_" + rest, image);
+							}
+						} catch (IOException ignored) {
+						}
 					}
 				}
 			}
@@ -382,6 +525,19 @@ public final class BlockTextures {
 		try (FileSystem fs = FileSystems.newFileSystem(root)) {
 			loadFromPath(fs.getPath("/"));
 		} catch (Exception ignored) {
+		}
+	}
+
+	private static void loadPngFile(Path path, String key) {
+		if (!Files.isRegularFile(path) || CACHE.containsKey(key)) {
+			return;
+		}
+		try (InputStream in = Files.newInputStream(path)) {
+			BufferedImage image = ImageIO.read(in);
+			if (image != null) {
+				CACHE.put(key, image);
+			}
+		} catch (IOException ignored) {
 		}
 	}
 
