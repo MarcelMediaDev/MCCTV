@@ -135,9 +135,6 @@ public final class BlockModels {
 				addApply(poses, best, pick);
 			}
 		}
-		if (id.equals("lily_pad")) {
-			poses.replaceAll(p -> new ModelPose(p.model(), p.x(), p.y() + 180, p.uvlock()));
-		}
 		List<BakedQuad> quads = new ArrayList<>();
 		for (ModelPose pose : poses) {
 			ResolvedModel model = resolveModel(pose.model);
@@ -411,15 +408,21 @@ public final class BlockModels {
 			float[] uv = face.has("uv")
 					? jsonUv(face.getAsJsonArray("uv"))
 					: defaultUv(dir, x0, y0, z0, x1, y1, z1);
-			if (face.has("rotation")) {
-				uv = rotateUv(uv, face.get("rotation").getAsInt());
+			int faceRot = face.has("rotation") ? face.get("rotation").getAsInt() : 0;
+			float[][] uvs;
+			if ("up".equals(dir) || "down".equals(dir)) {
+				uvs = cubeFaceUvs(uv, faceRot);
+			} else {
+				if (faceRot != 0) {
+					uv = rotateUv(uv, faceRot);
+				}
+				uvs = new float[][] {
+						{uv[0] / 16f, uv[3] / 16f},
+						{uv[2] / 16f, uv[3] / 16f},
+						{uv[2] / 16f, uv[1] / 16f},
+						{uv[0] / 16f, uv[1] / 16f}
+				};
 			}
-			float[][] uvs = {
-					{uv[0] / 16f, uv[3] / 16f},
-					{uv[2] / 16f, uv[3] / 16f},
-					{uv[2] / 16f, uv[1] / 16f},
-					{uv[0] / 16f, uv[1] / 16f}
-			};
 			if (rotation != null) {
 				rotateElement(corners, rotation);
 			}
@@ -441,6 +444,28 @@ public final class BlockModels {
 
 	private static float[] jsonUv(JsonArray uv) {
 		return new float[] {uv.get(0).getAsFloat(), uv.get(1).getAsFloat(), uv.get(2).getAsFloat(), uv.get(3).getAsFloat()};
+	}
+
+	private static float[][] cubeFaceUvs(float[] uv, int faceRot) {
+		float minU = uv[0] / 16f;
+		float minV = uv[1] / 16f;
+		float maxU = uv[2] / 16f;
+		float maxV = uv[3] / 16f;
+		float[][] uvs = {
+				{minU, minV},
+				{minU, maxV},
+				{maxU, maxV},
+				{maxU, minV}
+		};
+		int turns = Math.floorMod(faceRot / 90, 4);
+		if (turns == 0) {
+			return uvs;
+		}
+		float[][] out = new float[4][];
+		for (int i = 0; i < 4; i++) {
+			out[i] = uvs[(i + turns) % 4];
+		}
+		return out;
 	}
 
 	private static float[] defaultUv(String face, float x0, float y0, float z0, float x1, float y1, float z1) {
@@ -480,8 +505,8 @@ public final class BlockModels {
 
 	private static float[][] faceCorners(float x0, float y0, float z0, float x1, float y1, float z1, String face) {
 		return switch (face) {
-			case "down" -> new float[][] {{x0, y0, z1}, {x1, y0, z1}, {x1, y0, z0}, {x0, y0, z0}};
-			case "up" -> new float[][] {{x0, y1, z0}, {x1, y1, z0}, {x1, y1, z1}, {x0, y1, z1}};
+			case "down" -> new float[][] {{x0, y0, z1}, {x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}};
+			case "up" -> new float[][] {{x0, y1, z0}, {x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}};
 			case "north" -> new float[][] {{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}};
 			case "south" -> new float[][] {{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}};
 			case "west" -> new float[][] {{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}};
