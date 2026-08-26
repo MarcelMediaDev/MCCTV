@@ -12,9 +12,14 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.SignBlockEntity;
 import net.minecraft.block.entity.SignText;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
+import net.minecraft.entity.projectile.FireworkRocketEntity;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.FireworkExplosionComponent;
+import net.minecraft.component.type.FireworksComponent;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.decoration.ItemFrameEntity;
 import net.minecraft.block.Oxidizable;
@@ -66,8 +71,10 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class EntitySampler {
@@ -221,6 +228,7 @@ public final class EntitySampler {
 		root.add("mobs", mobs);
 		root.add("items", sampleItems(world, camera, eye, look, range));
 		root.add("tnt", sampleTnt(world, camera, eye, look, range));
+		root.add("fireworks", sampleFireworks(world, camera, eye, look, range));
 		root.add("frames", sampleFrames(world, camera, eye, look, range));
 		root.add("signs", sampleSigns(world, camera, eye, look, range));
 		root.addProperty("count", entities.size());
@@ -479,6 +487,88 @@ public final class EntitySampler {
 			tnt.add(json);
 		}
 		return tnt;
+	}
+
+	private static final Map<UUID, Map<UUID, JsonObject>> LAST_ROCKETS = new HashMap<>();
+
+	private static JsonArray sampleFireworks(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {
+		JsonArray rockets = new JsonArray();
+		JsonArray bursts = new JsonArray();
+		Box box = new Box(eye, eye).expand(range);
+		List<FireworkRocketEntity> found = world.getEntitiesByClass(FireworkRocketEntity.class, box,
+				entity -> inView(eye, look, entity.getX(), entity.getY(), entity.getZ(), range));
+		Set<UUID> seen = new HashSet<>();
+		Map<UUID, JsonObject> lastForCam = LAST_ROCKETS.computeIfAbsent(camera.id(), ignored -> new HashMap<>());
+		for (FireworkRocketEntity entity : found) {
+			UUID id = entity.getUuid();
+			seen.add(id);
+			JsonObject json = rocketJson(entity);
+			rockets.add(json);
+			lastForCam.put(id, json);
+		}
+		lastForCam.entrySet().removeIf(entry -> {
+			if (seen.contains(entry.getKey())) {
+				return false;
+			}
+			Entity still = world.getEntity(entry.getKey());
+			if (still != null && still.isAlive()) {
+				return false;
+			}
+			JsonObject last = entry.getValue();
+			double x = last.get("x").getAsDouble();
+			double y = last.get("y").getAsDouble();
+			double z = last.get("z").getAsDouble();
+			if (inView(eye, look, x, y, z, range + 8)) {
+				JsonObject burst = last.deepCopy();
+				burst.addProperty("burst", true);
+				bursts.add(burst);
+			}
+			return true;
+		});
+		for (var el : bursts) {
+			rockets.add(el);
+		}
+		return rockets;
+	}
+
+	private static JsonObject rocketJson(FireworkRocketEntity entity) {
+		JsonObject json = new JsonObject();
+		json.addProperty("uuid", entity.getUuidAsString());
+		json.addProperty("x", entity.getX());
+		json.addProperty("y", entity.getY());
+		json.addProperty("z", entity.getZ());
+		json.addProperty("yaw", entity.getYaw());
+		json.addProperty("pitch", entity.getPitch());
+		json.addProperty("item", "firework_rocket");
+		Vec3d vel = entity.getVelocity();
+		json.addProperty("vx", vel.x);
+		json.addProperty("vy", vel.y);
+		json.addProperty("vz", vel.z);
+		ItemStack stack = entity.getStack();
+		FireworksComponent fireworks = stack.isEmpty() ? null : stack.get(DataComponentTypes.FIREWORKS);
+		JsonArray explosions = new JsonArray();
+		if (fireworks != null) {
+			json.addProperty("flight", fireworks.flightDuration());
+			for (FireworkExplosionComponent boom : fireworks.explosions()) {
+				JsonObject one = new JsonObject();
+				one.addProperty("shape", boom.shape().asString());
+				one.addProperty("trail", boom.hasTrail());
+				one.addProperty("twinkle", boom.hasTwinkle());
+				JsonArray colors = new JsonArray();
+				for (int rgb : boom.colors()) {
+					colors.add(rgb);
+				}
+				one.add("colors", colors);
+				JsonArray fade = new JsonArray();
+				for (int rgb : boom.fadeColors()) {
+					fade.add(rgb);
+				}
+				one.add("fade", fade);
+				explosions.add(one);
+			}
+		}
+		json.add("explosions", explosions);
+		return json;
 	}
 
 	private static boolean inView(Vec3d eye, Vec3d look, double x, double y, double z, double range) {

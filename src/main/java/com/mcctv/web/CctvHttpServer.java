@@ -215,6 +215,10 @@ public class CctvHttpServer {
 				this.apiItem(ctx, request, path.substring("/api/item/".length()));
 				return;
 			}
+			if (path.startsWith("/api/particle/")) {
+				this.apiParticle(ctx, request, path.substring("/api/particle/".length()));
+				return;
+			}
 			if (path.startsWith("/api/armor/")) {
 				this.apiArmor(ctx, request, path.substring("/api/armor/".length()));
 				return;
@@ -349,6 +353,20 @@ public class CctvHttpServer {
 			sendBytes(ctx, request, HttpResponseStatus.OK, "image/png", png);
 		}
 
+		private void apiParticle(ChannelHandlerContext ctx, FullHttpRequest request, String name) {
+			String key = sanitizeParticle(name);
+			if (key.isEmpty()) {
+				send(ctx, request, HttpResponseStatus.NOT_FOUND, "text/plain", "No particle");
+				return;
+			}
+			byte[] png = loadVanillaTexture("assets/minecraft/textures/particle/" + key + ".png");
+			if (png.length == 0) {
+				send(ctx, request, HttpResponseStatus.NOT_FOUND, "text/plain", "No particle");
+				return;
+			}
+			sendBytes(ctx, request, HttpResponseStatus.OK, "image/png", png);
+		}
+
 		private void apiArmor(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
 			int slash = path.indexOf('/');
 			if (slash <= 0 || slash >= path.length() - 1) {
@@ -466,6 +484,27 @@ public class CctvHttpServer {
 		} catch (Exception ignored) {
 			return new byte[0];
 		}
+	}
+
+	private static String sanitizeParticle(String name) {
+		if (name == null) {
+			return "";
+		}
+		int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+		if (slash >= 0) {
+			name = name.substring(slash + 1);
+		}
+		if (name.endsWith(".png") || name.endsWith(".PNG")) {
+			name = name.substring(0, name.length() - 4);
+		}
+		StringBuilder out = new StringBuilder(name.length());
+		for (int i = 0; i < name.length(); i++) {
+			char c = Character.toLowerCase(name.charAt(i));
+			if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+				out.append(c);
+			}
+		}
+		return out.toString();
 	}
 
 	private static String first(QueryStringDecoder decoder, String key) {
