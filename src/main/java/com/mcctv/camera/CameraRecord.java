@@ -2,6 +2,7 @@ package com.mcctv.camera;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.UUID;
 
@@ -36,5 +37,18 @@ public record CameraRecord(
 
 	public boolean isAt(String dimensionId, int bx, int by, int bz) {
 		return this.dimension.equals(dimensionId) && this.x == bx && this.y == by && this.z == bz;
+	}
+
+	public Vec3d look() {
+		return Vec3d.fromPolar(this.pitch, this.yaw);
+	}
+
+	public Vec3d eye() {
+		Vec3d look = this.look();
+		return new Vec3d(
+				this.x + 0.5 + look.x * 0.2,
+				this.y + 0.5 + look.y * 0.2,
+				this.z + 0.5 + look.z * 0.2
+		);
 	}
 }

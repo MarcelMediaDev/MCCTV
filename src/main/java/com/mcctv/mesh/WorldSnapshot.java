@@ -28,6 +28,9 @@ public final class WorldSnapshot {
 	public final Voxel[] voxels;
 	public final boolean loaded;
 	public final SkyAppearance sky;
+	private final int cameraX;
+	private final int cameraY;
+	private final int cameraZ;
 
 	public record Voxel(
 			boolean air,
@@ -51,7 +54,8 @@ public final class WorldSnapshot {
 	private static final Voxel EMPTY = new Voxel(true, false, false, false, (byte) 0, (byte) 15, "air", 0x91BD59, 0x77AB2F, 0x3F76E4, 0, (byte) -1, false, (byte) -1, "");
 
 	private WorldSnapshot(int minX, int minY, int minZ, int sizeX, int sizeY, int sizeZ,
-			float eyeX, float eyeY, float eyeZ, float yaw, float pitch, Voxel[] voxels, boolean loaded, SkyAppearance sky) {
+			float eyeX, float eyeY, float eyeZ, float yaw, float pitch, Voxel[] voxels, boolean loaded, SkyAppearance sky,
+			int cameraX, int cameraY, int cameraZ) {
 		this.minX = minX;
 		this.minY = minY;
 		this.minZ = minZ;
@@ -66,14 +70,18 @@ public final class WorldSnapshot {
 		this.voxels = voxels;
 		this.loaded = loaded;
 		this.sky = sky;
+		this.cameraX = cameraX;
+		this.cameraY = cameraY;
+		this.cameraZ = cameraZ;
 	}
 
 	public static WorldSnapshot capture(ServerWorld world, CameraRecord camera, CctvConfig config) {
 		Colormaps.ensureLoaded();
-		Vec3d look = Vec3d.fromPolar(camera.pitch(), camera.yaw());
-		double eyeX = camera.x() + 0.5 + look.x * 0.55;
-		double eyeY = camera.y() + 0.5 + look.y * 0.15;
-		double eyeZ = camera.z() + 0.5 + look.z * 0.55;
+		Vec3d look = camera.look();
+		Vec3d eye = camera.eye();
+		double eyeX = eye.x;
+		double eyeY = eye.y;
+		double eyeZ = eye.z;
 		SkyAppearance sky = SkyAppearance.capture(world, eyeX, eyeY, eyeZ, config.viewDistance);
 		int range = Math.max(8, config.viewDistance);
 		int pad = Math.max(16, range);
@@ -99,7 +107,7 @@ public final class WorldSnapshot {
 				for (int x = 0; x < sizeX; x++) {
 					pos.set(minX + x, minY + y, minZ + z);
 					int index = x + sizeX * (z + sizeZ * y);
-					Voxel voxel = read(world, pos);
+					Voxel voxel = read(world, pos, pos.getX() == camera.x() && pos.getY() == camera.y() && pos.getZ() == camera.z());
 					voxels[index] = voxel;
 					if (!voxel.air() || world.isChunkLoaded(pos)) {
 						anyLoaded = true;
@@ -108,7 +116,8 @@ public final class WorldSnapshot {
 			}
 		}
 		return new WorldSnapshot(minX, minY, minZ, sizeX, sizeY, sizeZ,
-				(float) eyeX, (float) eyeY, (float) eyeZ, camera.yaw(), camera.pitch(), voxels, anyLoaded, sky);
+				(float) eyeX, (float) eyeY, (float) eyeZ, camera.yaw(), camera.pitch(), voxels, anyLoaded, sky,
+				camera.x(), camera.y(), camera.z());
 	}
 
 	public boolean update(ServerWorld world, int worldX, int worldY, int worldZ) {
@@ -118,7 +127,8 @@ public final class WorldSnapshot {
 		if (x < 0 || y < 0 || z < 0 || x >= this.sizeX || y >= this.sizeY || z >= this.sizeZ) {
 			return false;
 		}
-		this.voxels[x + this.sizeX * (z + this.sizeZ * y)] = read(world, new BlockPos(worldX, worldY, worldZ));
+		this.voxels[x + this.sizeX * (z + this.sizeZ * y)] = read(world, new BlockPos(worldX, worldY, worldZ),
+				worldX == this.cameraX && worldY == this.cameraY && worldZ == this.cameraZ);
 		return true;
 	}
 
@@ -172,7 +182,7 @@ public final class WorldSnapshot {
 		return 0xFFFFFF;
 	}
 
-	private static Voxel read(ServerWorld world, BlockPos pos) {
+	private static Voxel read(ServerWorld world, BlockPos pos, boolean hide) {
 		if (!world.isChunkLoaded(pos)) {
 			return EMPTY;
 		}
@@ -182,6 +192,9 @@ public final class WorldSnapshot {
 		int water = Colormaps.safe(biome.getWaterColor(), 0x3F76E4);
 		byte blockLight = (byte) world.getLightLevel(LightType.BLOCK, pos);
 		byte skyLight = (byte) world.getLightLevel(LightType.SKY, pos);
+		if (hide) {
+			return new Voxel(true, false, false, false, blockLight, skyLight, "air", grass, foliage, water, 0, (byte) -1, false, (byte) -1, "");
+		}
 		BlockState state = world.getBlockState(pos);
 		if (state.isAir()) {
 			return new Voxel(true, false, false, false, blockLight, skyLight, "air", grass, foliage, water, 0, (byte) -1, false, (byte) -1, "");
