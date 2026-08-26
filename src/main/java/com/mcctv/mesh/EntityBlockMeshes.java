@@ -72,38 +72,28 @@ final class EntityBlockMeshes {
 		String type = props.getOrDefault("type", "single");
 		String tex = chestTexture(id, type);
 		int y = yaw(extraY, props.get("facing"), false);
-		float pitch = lidPitch(props);
 		List<BlockModels.BakedQuad> list = new ArrayList<>();
 		if ("left".equals(type)) {
 			addCuboid(list, 0, 0, 1, 15, 10, 14, tex, 0, 19, y);
-			addCuboid(list, 0, 9, 1, 15, 5, 14, tex, 0, 0, y, pitch);
-			addCuboid(list, 0, 7, 15, 1, 4, 1, tex, 0, 0, y, pitch);
+			addCuboid(list, 0, 9, 1, 15, 5, 14, tex, 0, 0, y);
+			addCuboid(list, 0, 7, 15, 1, 4, 1, tex, 0, 0, y);
 		} else if ("right".equals(type)) {
 			addCuboid(list, 1, 0, 1, 15, 10, 14, tex, 0, 19, y);
-			addCuboid(list, 1, 9, 1, 15, 5, 14, tex, 0, 0, y, pitch);
-			addCuboid(list, 15, 7, 15, 1, 4, 1, tex, 0, 0, y, pitch);
+			addCuboid(list, 1, 9, 1, 15, 5, 14, tex, 0, 0, y);
+			addCuboid(list, 15, 7, 15, 1, 4, 1, tex, 0, 0, y);
 		} else {
 			addCuboid(list, 1, 0, 1, 14, 10, 14, tex, 0, 19, y);
-			addCuboid(list, 1, 9, 1, 14, 5, 14, tex, 0, 0, y, pitch);
-			addCuboid(list, 7, 7, 15, 2, 4, 1, tex, 0, 0, y, pitch);
+			addCuboid(list, 1, 9, 1, 14, 5, 14, tex, 0, 0, y);
+			addCuboid(list, 7, 7, 15, 2, 4, 1, tex, 0, 0, y);
 		}
 		return list;
 	}
 
-	private static float lidPitch(Map<String, String> props) {
-		float p = 0f;
-		try {
-			p = Float.parseFloat(props.getOrDefault("lid", "0")) / 10f;
-		} catch (NumberFormatException ignored) {
-			return 0f;
-		}
-		p = Math.max(0f, Math.min(1f, p));
-		float g = 1f - p;
-		g = 1f - g * g * g;
-		return -g * ((float) Math.PI / 2f);
+	static int facingYaw(String facing) {
+		return yaw(0, facing, false);
 	}
 
-	private static String chestTexture(String id, String type) {
+	static String chestTexture(String id, String type) {
 		String base = switch (id) {
 			case "ender_chest" -> "ender";
 			case "trapped_chest" -> "trapped";
