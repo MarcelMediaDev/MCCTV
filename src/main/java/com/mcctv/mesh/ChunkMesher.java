@@ -135,6 +135,11 @@ public final class ChunkMesher {
 					seedCuboidTiles(book, name, 0, 12, 14, 10, 2);
 				} else if (name.startsWith("entity_sign_")) {
 					seedSignBoardTiles(book, name);
+				} else if (name.startsWith("entity_banner_") && !name.startsWith("entity_banner_pattern_")
+						&& !name.equals("entity_banner_sheet")) {
+					seedCuboidTiles(book, name, 0, 0, 20, 40, 1);
+					seedCuboidTiles(book, name, 44, 0, 2, 42, 2);
+					seedCuboidTiles(book, name, 0, 42, 20, 2, 2);
 				}
 				continue;
 			}
@@ -164,7 +169,18 @@ public final class ChunkMesher {
 				{u + dz + dx + dz, v + dz, dx, dy}
 		};
 		for (int[] c : faces) {
-			tileIndex(book, new BlockAppearance.Face(name + "@" + c[0] + "," + c[1] + "," + c[2] + "," + c[3], 0xFFFFFF, false), 0x7F7F7F);
+			seedUvGrid(book, name, c[0], c[1], Math.max(1, c[2]), Math.max(1, c[3]));
+		}
+	}
+
+	private static void seedUvGrid(AtlasBook book, String name, int u, int v, int w, int h) {
+		for (int ou = 0; ou < w; ou += 16) {
+			int cw = Math.min(16, w - ou);
+			for (int ov = 0; ov < h; ov += 16) {
+				int ch = Math.min(16, h - ov);
+				tileIndex(book, new BlockAppearance.Face(
+						name + "@" + (u + ou) + "," + (v + ov) + "," + cw + "," + ch, 0xFFFFFF, false), 0x7F7F7F);
+			}
 		}
 	}
 
@@ -407,7 +423,31 @@ public final class ChunkMesher {
 		verts.add(new float[] {x, y, z, u, v, r, g, b, tile, bx, by, bz});
 	}
 
+	private static final String[] BANNER_DYES = {
+			"light_blue", "light_gray", "magenta", "orange", "purple", "yellow",
+			"black", "brown", "green", "white", "cyan", "gray", "lime", "pink", "blue", "red"
+	};
+
+	private static String bannerAtlasFallback(String texture) {
+		if (texture == null || !texture.startsWith("entity_banner_")) {
+			return "";
+		}
+		int at = texture.indexOf('@');
+		String name = at > 0 ? texture.substring(0, at) : texture;
+		String spec = at > 0 ? texture.substring(at) : "";
+		for (String dye : BANNER_DYES) {
+			String prefix = "entity_banner_" + dye;
+			if (name.equals(prefix) || name.startsWith(prefix + "_")) {
+				return prefix + spec;
+			}
+		}
+		return "entity_banner_white" + spec;
+	}
+
 	private static int existingTile(AtlasBook book, String texture) {
+		if (texture == null || texture.isEmpty()) {
+			return -1;
+		}
 		int white = quantize(0xFFFFFF);
 		String hex = Integer.toHexString(white);
 		Integer exact = book.index.get(texture + "#" + hex);
@@ -438,6 +478,9 @@ public final class ChunkMesher {
 		}
 		if (book.frozen) {
 			int fallback = existingTile(book, face.texture());
+			if (fallback < 0) {
+				fallback = existingTile(book, bannerAtlasFallback(face.texture()));
+			}
 			return fallback >= 0 ? fallback : 0;
 		}
 		book.keys.add(new AtlasTile(face.texture(), tint, face.bakedGrassSide(), mapColor));

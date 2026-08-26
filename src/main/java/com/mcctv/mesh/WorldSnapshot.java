@@ -5,6 +5,7 @@ import com.mcctv.camera.CameraRecord;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.MapColor;
+import net.minecraft.block.entity.BannerBlockEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -203,6 +204,13 @@ public final class WorldSnapshot {
 		MapColor mapColor = state.getMapColor(world, pos);
 		int color = mapColor != null ? mapColor.color : 0x7f7f7f;
 		String props = BlockAppearance.propsOf(state);
+		if (world.getBlockEntity(pos) instanceof BannerBlockEntity banner) {
+			String layers = BlockTextures.bannerLayers(banner);
+			if (!layers.isEmpty()) {
+				String extra = "layers=" + layers;
+				props = props.isEmpty() ? extra : props + "," + extra;
+			}
+		}
 		return new Voxel(
 				false,
 				state.isOpaque() && Block.isShapeFullCube(state.getCollisionShape(world, pos)),

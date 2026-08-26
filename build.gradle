@@ -52,10 +52,11 @@ tasks.register("copyVanillaTextures") {
 		def chestDir = new File(root, "assets/mcctv/vanilla/entity/chest")
 		def signDir = new File(root, "assets/mcctv/vanilla/entity/signs")
 		def hangingSignDir = new File(root, "assets/mcctv/vanilla/entity/signs/hanging")
+		def bannerDir = new File(root, "assets/mcctv/vanilla/entity/banner")
 		def fontDir = new File(root, "assets/mcctv/vanilla/font")
 		def humanoidDir = new File(root, "assets/mcctv/vanilla/entity/equipment/humanoid")
 		def leggingsDir = new File(root, "assets/mcctv/vanilla/entity/equipment/humanoid_leggings")
-		[blockDir, itemDir, blockstateDir, modelDir, bedDir, chestDir, signDir, hangingSignDir, fontDir, humanoidDir, leggingsDir].each { it.mkdirs() }
+		[blockDir, itemDir, blockstateDir, modelDir, bedDir, chestDir, signDir, hangingSignDir, bannerDir, fontDir, humanoidDir, leggingsDir].each { it.mkdirs() }
 		def blockNames = []
 		def itemNames = []
 		def blockstateNames = []
@@ -64,8 +65,10 @@ tasks.register("copyVanillaTextures") {
 		def chestNames = []
 		def signNames = []
 		def hangingSignNames = []
+		def bannerNames = []
 		def humanoidNames = []
 		def leggingsNames = []
+		def copiedBannerBase = false
 		def zip = new java.util.zip.ZipFile(jar)
 		try {
 			zip.entries().each { entry ->
@@ -114,6 +117,15 @@ tasks.register("copyVanillaTextures") {
 					}
 				} else if (path == "assets/minecraft/textures/font/ascii.png") {
 					new File(fontDir, "ascii.png").withOutputStream { out -> out << zip.getInputStream(entry) }
+				} else if (path == "assets/minecraft/textures/entity/banner_base.png") {
+					new File(root, "assets/mcctv/vanilla/entity/banner_base.png").withOutputStream { out -> out << zip.getInputStream(entry) }
+					copiedBannerBase = true
+				} else if (path.startsWith("assets/minecraft/textures/entity/banner/") && path.endsWith(".png")) {
+					def key = path.substring("assets/minecraft/textures/entity/banner/".length(), path.length() - 4)
+					if (!key.contains("/")) {
+						new File(bannerDir, key + ".png").withOutputStream { out -> out << zip.getInputStream(entry) }
+						bannerNames << key
+					}
 				} else if (path.startsWith("assets/minecraft/textures/entity/chest/") && path.endsWith(".png")) {
 					def key = path.substring("assets/minecraft/textures/entity/chest/".length(), path.length() - 4)
 					if (!key.contains("/")) {
@@ -162,9 +174,10 @@ tasks.register("copyVanillaTextures") {
 		new File(root, "assets/mcctv/vanilla/entity-chest-index.txt").text = chestNames.sort().join("\n") + "\n"
 		new File(root, "assets/mcctv/vanilla/entity-sign-index.txt").text = signNames.sort().join("\n") + "\n"
 		new File(root, "assets/mcctv/vanilla/entity-sign-hanging-index.txt").text = hangingSignNames.sort().join("\n") + "\n"
+		new File(root, "assets/mcctv/vanilla/entity-banner-index.txt").text = bannerNames.sort().join("\n") + "\n"
 		new File(root, "assets/mcctv/vanilla/humanoid-index.txt").text = humanoidNames.sort().unique().join("\n") + "\n"
 		new File(root, "assets/mcctv/vanilla/humanoid-leggings-index.txt").text = leggingsNames.sort().unique().join("\n") + "\n"
-		logger.lifecycle("Copied ${blockNames.size()} block, ${itemNames.size()} item, ${blockstateNames.size()} blockstates, ${modelNames.size()} models, ${bedNames.size()} beds, ${humanoidNames.size()} armor")
+		logger.lifecycle("Copied ${blockNames.size()} block, ${itemNames.size()} item, ${blockstateNames.size()} blockstates, ${modelNames.size()} models, ${bedNames.size()} beds, ${bannerNames.size()} banner patterns, banner_base=${copiedBannerBase}, ${humanoidNames.size()} armor")
 	}
 }
 
