@@ -1108,6 +1108,7 @@ function ensureMob(tex) {
 	return rec;
 }
 
+const MOB_ARMOR_STAND = new Set(["armor_stand"]);
 const MOB_BIPED = new Set(["zombie", "husk", "drowned", "piglin", "piglin_brute", "zombified_piglin"]);
 const MOB_SKELETON = new Set(["skeleton", "stray", "bogged", "parched", "wither_skeleton"]);
 const MOB_CREEPER = new Set(["creeper"]);
@@ -1170,6 +1171,7 @@ function mobFlips(family) {
 }
 
 function mobFamily(type) {
+	if (MOB_ARMOR_STAND.has(type)) return "armor_stand";
 	if (MOB_BIPED.has(type)) return "biped";
 	if (MOB_SKELETON.has(type)) return "skeleton";
 	if (MOB_CREEPER.has(type)) return "creeper";
@@ -1248,6 +1250,10 @@ function mobMesh(list, m, rec, layer) {
 	const box = (pivot, rx, ry, ox, oy, oz, sx, sy, sz, u, v, shade, rz, inflate, tint, swapOverride, flipV, parentXf) => {
 		modelBox(list, m, unit, pivot, rx, ry, ox, oy, oz, sx, sy, sz, u, v, tw, th, shade, rz, inflate, tint, swapOverride, flipV, parentXf);
 	};
+	if (family === "armor_stand") {
+		armorStandMesh(box, m, layer);
+		return;
+	}
 	if (family === "biped" || family === "skeleton") {
 		const overlay = !!layer;
 		const parched = type === "parched";
@@ -2322,6 +2328,94 @@ function mobMesh(list, m, rec, layer) {
 	box([4, 12, -6], swing, 0, -2, 0, -2, 4, 12, 4, 0, 16);
 }
 
+function standEuler(m, key, def) {
+	const a = m[key];
+	const d = Math.PI / 180;
+	if (!a || a.length < 3) return [def[0] * d, def[1] * d, def[2] * d];
+	return [(+a[0] || 0) * d, (+a[1] || 0) * d, (+a[2] || 0) * d];
+}
+
+function armorStandMesh(box, m, layer) {
+	if (m.invis || layer) return;
+	const [hrx, hry, hrz] = standEuler(m, "hp", [0, 0, 0]);
+	const [brx, bry, brz] = standEuler(m, "bp", [0, 0, 0]);
+	const [lax, lay, laz] = standEuler(m, "la", [-10, 0, -10]);
+	const [rax, ray, raz] = standEuler(m, "ra", [-15, 0, 10]);
+	const [llx, lly, llz] = standEuler(m, "ll", [-1, 0, -1]);
+	const [rlx, rly, rlz] = standEuler(m, "rl", [1, 0, 1]);
+	box([0, 1, 0], hrx, hry, -1, -7, -1, 2, 7, 2, 0, 0, 1, hrz);
+	box([0, 0, 0], brx, bry, -6, 0, -1.5, 12, 3, 3, 0, 26, 1, brz);
+	box([0, 0, 0], brx, bry, -3, 3, -1, 2, 7, 2, 16, 0, 1, brz);
+	box([0, 0, 0], brx, bry, 1, 3, -1, 2, 7, 2, 48, 16, 1, brz);
+	box([0, 0, 0], brx, bry, -4, 10, -1, 8, 2, 2, 0, 48, 1, brz);
+	if (m.arms) {
+		box([5, 2, 0], rax, ray, 0, -2, -1, 2, 12, 2, 24, 0, 1, raz);
+		box([-5, 2, 0], lax, lay, -2, -2, -1, 2, 12, 2, 32, 16, 1, laz);
+	}
+	box([1.9, 12, 0], rlx, rly, -1, 0, -1, 2, 11, 2, 8, 0, 1, rlz);
+	box([-1.9, 12, 0], llx, lly, -1, 0, -1, 2, 11, 2, 40, 16, 1, llz);
+	if (m.base !== false) {
+		box([0, 12, 0], 0, 0, -6, 11, -6, 12, 1, 12, 0, 32);
+	}
+}
+
+function armorStandSlot(list, m, slot, rec) {
+	const unit = P * (m.baby ? 0.5 : 1);
+	const tw = rec.w || 64;
+	const th = rec.h || 64;
+	const [hrx, hry, hrz] = standEuler(m, "hp", [0, 0, 0]);
+	const [brx, bry, brz] = standEuler(m, "bp", [0, 0, 0]);
+	const [lax, lay, laz] = standEuler(m, "la", [-10, 0, -10]);
+	const [rax, ray, raz] = standEuler(m, "ra", [-15, 0, 10]);
+	const [llx, lly, llz] = standEuler(m, "ll", [-1, 0, -1]);
+	const [rlx, rly, rlz] = standEuler(m, "rl", [1, 0, 1]);
+	const dil = slot === "legs" ? 0.5 : 1;
+	const leftArmU = th >= 64 ? 32 : 40;
+	const leftArmV = th >= 64 ? 48 : 16;
+	const leftLegU = th >= 64 ? 16 : 0;
+	const leftLegV = th >= 64 ? 48 : 16;
+	const box = (pivot, rx, ry, ox, oy, oz, sx, sy, sz, u, v, rz) => {
+		modelBox(list, m, unit, pivot, rx, ry, ox, oy, oz, sx, sy, sz, u, v, tw, th, 1, rz, dil);
+	};
+	if (slot === "head") {
+		box([0, 0, 0], hrx, hry, -4, -8, -4, 8, 8, 8, 0, 0, hrz);
+	} else if (slot === "chest") {
+		box([0, 0, 0], brx, bry, -4, 0, -2, 8, 12, 4, 16, 16, brz);
+		box([5, 2, 0], rax, ray, -1, -2, -2, 4, 12, 4, 40, 16, raz);
+		box([-5, 2, 0], lax, lay, -3, -2, -2, 4, 12, 4, leftArmU, leftArmV, laz);
+	} else if (slot === "legs") {
+		box([0, 0, 0], brx, bry, -4, 0, -2, 8, 12, 4, 16, 16, brz);
+		box([1.9, 12, 0], rlx, rly, -2, 0, -2, 4, 12, 4, 0, 16, rlz);
+		box([-1.9, 12, 0], llx, lly, -2, 0, -2, 4, 12, 4, leftLegU, leftLegV, llz);
+	} else if (slot === "feet") {
+		box([1.9, 12, 0], rlx, rly, -2, 0, -2, 4, 12, 4, 0, 16, rlz);
+		box([-1.9, 12, 0], llx, lly, -2, 0, -2, 4, 12, 4, leftLegU, leftLegV, llz);
+	}
+}
+
+function drawEquippedArmor(entity, slotFn, drawFn) {
+	const armor = entity.armor || {};
+	const pieces = [
+		["legs", "humanoid_leggings", armor.legs],
+		["head", "humanoid", armor.head],
+		["chest", "humanoid", armor.chest],
+		["feet", "humanoid", armor.feet]
+	];
+	for (const [slot, layer, mat] of pieces) {
+		if (!mat) continue;
+		const arec = ensureArmor(layer, mat);
+		if (!arec || !arec.ready) continue;
+		const ad = [];
+		slotFn(ad, entity, slot, arec);
+		if (ad.length) {
+			gl.enable(gl.POLYGON_OFFSET_FILL);
+			gl.polygonOffset(-1.5, -1.5);
+			drawFn(new Float32Array(ad), ad.length / 9, 1, 1, arec.tex);
+			gl.disable(gl.POLYGON_OFFSET_FILL);
+		}
+	}
+}
+
 function armorSlot(list, p, slot, rec) {
 	const s = playerPose(p);
 	const aw = s.aw;
@@ -3230,26 +3324,7 @@ function render() {
 		const data = [];
 		playerMesh(data, pose);
 		draw(new Float32Array(data), data.length / 9, 1, rec.ready ? 1 : 0, rec.tex);
-		const armor = p.armor || {};
-		const pieces = [
-			["legs", "humanoid_leggings", armor.legs],
-			["head", "humanoid", armor.head],
-			["chest", "humanoid", armor.chest],
-			["feet", "humanoid", armor.feet]
-		];
-		for (const [slot, layer, mat] of pieces) {
-			if (!mat) continue;
-			const arec = ensureArmor(layer, mat);
-			if (!arec || !arec.ready) continue;
-			const ad = [];
-			armorSlot(ad, pose, slot, arec);
-			if (ad.length) {
-				gl.enable(gl.POLYGON_OFFSET_FILL);
-				gl.polygonOffset(-1.5, -1.5);
-				draw(new Float32Array(ad), ad.length / 9, 1, 1, arec.tex);
-				gl.disable(gl.POLYGON_OFFSET_FILL);
-			}
-		}
+		drawEquippedArmor(pose, armorSlot, draw);
 		const mainLeft = !!p.leftMain;
 		appendHeld(heldCubes, heldSprites, pose, p.mainHand, mainLeft);
 		appendHeld(heldCubes, heldSprites, pose, p.offHand, !mainLeft);
@@ -3266,6 +3341,19 @@ function render() {
 		mobMesh(overlayGroups.get(key).data, mob, rec, layer);
 	};
 	for (const m of sampled.mobs) {
+		if (m.type === "armor_stand") {
+			if (!m.invis) {
+				const rec = ensureMob(m.tex || "armorstand/wood");
+				if (!rec || !rec.ready) {
+					drawBox(mobFallback, m.x - 0.2, m.y, m.z - 0.2, 0.4, Math.max(0.8, m.h || 1.975), 0.4, 0.72, 0.58, 0.38);
+				} else {
+					if (!mobGroups.has(rec.key)) mobGroups.set(rec.key, { rec, data: [] });
+					mobMesh(mobGroups.get(rec.key).data, m, rec);
+				}
+			}
+			drawEquippedArmor(m, armorStandSlot, draw);
+			continue;
+		}
 		const rec = ensureMob(m.tex || m.type);
 		if (!rec || !rec.ready) {
 			drawBox(mobFallback, m.x - 0.25, m.y, m.z - 0.25, 0.5, Math.max(0.6, m.h || 1.4), 0.5, 0.85, 0.4, 0.25);

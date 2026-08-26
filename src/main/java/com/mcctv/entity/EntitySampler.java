@@ -15,6 +15,7 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.decoration.ItemFrameEntity;
 import net.minecraft.block.Oxidizable;
 import net.minecraft.entity.mob.BoggedEntity;
@@ -59,6 +60,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.EulerAngle;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
@@ -186,6 +188,18 @@ public final class EntitySampler {
 				}
 				if (entity instanceof TurtleEntity turtle) {
 					json.addProperty("egg", turtle.hasEgg());
+				}
+				if (entity instanceof ArmorStandEntity stand) {
+					json.add("armor", armorJson(stand));
+					json.addProperty("arms", stand.shouldShowArms());
+					json.addProperty("base", stand.shouldShowBasePlate());
+					json.addProperty("invis", stand.isInvisible());
+					json.add("hp", eulerJson(stand.getHeadRotation()));
+					json.add("bp", eulerJson(stand.getBodyRotation()));
+					json.add("la", eulerJson(stand.getLeftArmRotation()));
+					json.add("ra", eulerJson(stand.getRightArmRotation()));
+					json.add("ll", eulerJson(stand.getLeftLegRotation()));
+					json.add("rl", eulerJson(stand.getRightLegRotation()));
 				}
 				ItemStack held = ItemStack.EMPTY;
 				if (entity instanceof WanderingTraderEntity || entity.isUsingItem()) {
@@ -546,6 +560,20 @@ public final class EntitySampler {
 		return json;
 	}
 
+	private static JsonArray eulerJson(EulerAngle angle) {
+		JsonArray json = new JsonArray();
+		if (angle == null) {
+			json.add(0);
+			json.add(0);
+			json.add(0);
+			return json;
+		}
+		json.add(angle.pitch());
+		json.add(angle.yaw());
+		json.add(angle.roll());
+		return json;
+	}
+
 	private static JsonObject armorJson(LivingEntity entity) {
 		JsonObject json = new JsonObject();
 		json.addProperty("head", armorMaterial(entity.getEquippedStack(EquipmentSlot.HEAD)));
@@ -583,7 +611,11 @@ public final class EntitySampler {
 		if (entity instanceof ServerPlayerEntity player && player.isSpectator()) {
 			return false;
 		}
-		if (entity.isInvisible()) {
+		if (entity instanceof ArmorStandEntity stand) {
+			if (stand.isMarker()) {
+				return false;
+			}
+		} else if (entity.isInvisible()) {
 			return false;
 		}
 		Vec3d target = entity.getEyePos();
