@@ -76,6 +76,7 @@ public final class MobTextures {
 				name.equals("ocelot") ? "cat/ocelot" : "",
 				name.equals("wolf") ? "wolf/wolf" : "",
 				name.equals("parrot") ? "parrot/parrot_red_blue" : "",
+				name.equals("armor_stand") ? "armorstand/wood" : "",
 				name.equals("armadillo") ? "armadillo" : "",
 				name.equals("bat") ? "bat" : "",
 				name.equals("bee") ? "bee/bee" : "",
@@ -177,7 +178,7 @@ public final class MobTextures {
 
 	private static boolean skipLayer(String key) {
 		return key.contains("saddle") || key.contains("_eyes") || key.contains("overlay")
-				|| key.contains("armor") || key.contains("collar") || key.contains("wool")
+				|| (key.contains("armor") && !key.startsWith("armorstand")) || key.contains("collar") || key.contains("wool")
 				|| key.contains("spit") || key.contains("stinger") || key.contains("decor")
 				|| key.contains("crackiness") || key.contains("profession") || key.endsWith("_baby")
 				|| key.contains("bioluminescent") || key.contains("pulsating") || key.contains("warden_heart")
