@@ -5,7 +5,6 @@ import com.mcctv.McCctv;
 import com.mcctv.camera.CameraRecord;
 import com.mcctv.camera.CameraRegistry;
 import com.mcctv.entity.EntitySampler;
-import com.mcctv.mesh.ChestLids;
 import com.mcctv.mesh.ChunkMesher;
 import com.mcctv.mesh.MeshResult;
 import com.mcctv.mesh.WorldSnapshot;
@@ -162,10 +161,6 @@ public class CctvSessions {
 
 	public void tick() {
 		this.tick++;
-		ChestLids.beginTick();
-		for (UUID cameraId : this.viewers.keySet()) {
-			this.tickChests(cameraId);
-		}
 		for (UUID cameraId : Set.copyOf(this.dirtyBlocks.keySet())) {
 			this.flushPatch(cameraId, false);
 		}
@@ -188,20 +183,6 @@ public class CctvSessions {
 			for (CameraRecord gone : this.cameras.pruneMissing()) {
 				this.dropCamera(gone);
 			}
-		}
-	}
-
-	private void tickChests(UUID cameraId) {
-		CameraRecord camera = this.cameras.get(cameraId).orElse(null);
-		if (camera == null) {
-			return;
-		}
-		ServerWorld world = this.cameras.worldOf(camera);
-		if (world == null) {
-			return;
-		}
-		for (BlockPos pos : ChestLids.tickNear(world, camera.x(), camera.y(), camera.z(), this.config.viewDistance)) {
-			this.dirtyBlocks.computeIfAbsent(cameraId, ignored -> ConcurrentHashMap.newKeySet()).add(pos.toImmutable());
 		}
 	}
 
@@ -230,6 +211,7 @@ public class CctvSessions {
 				}
 				this.atlases.put(cameraId, book);
 				this.sendMesh(cameraId, camera, mesh);
+				this.sendEntities(cameraId);
 				this.patchBusy.remove(cameraId);
 				this.flushPatch(cameraId, false);
 			});

@@ -203,10 +203,6 @@ public final class WorldSnapshot {
 		MapColor mapColor = state.getMapColor(world, pos);
 		int color = mapColor != null ? mapColor.color : 0x7f7f7f;
 		String props = BlockAppearance.propsOf(state);
-		if (ChestLids.tracks(id)) {
-			String lid = "lid=" + ChestLids.progress(world, pos);
-			props = props.isEmpty() ? lid : props + "," + lid;
-		}
 		return new Voxel(
 				false,
 				state.isOpaque() && Block.isShapeFullCube(state.getCollisionShape(world, pos)),

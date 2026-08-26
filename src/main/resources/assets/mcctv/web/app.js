@@ -34,6 +34,7 @@ const skins = new Map();
 const itemTex = new Map();
 const armorTex = new Map();
 const poses = new Map();
+const chestGeom = new Map();
 let lastFrame = performance.now();
 let animClock = 0;
 
@@ -284,7 +285,28 @@ function poseOf(e) {
 		headYaw: e.headYaw != null ? e.headYaw : (e.yaw || 0)
 	};
 }
+function ingestChests(list) {
+	const seen = new Set();
+	for (const e of list) {
+		const id = "chest:" + (e.uuid || (e.x + "," + e.y + "," + e.z));
+		seen.add(id);
+		const prev = poses.get(id);
+		poses.set(id, Object.assign({}, e, {
+			kind: "chest",
+			lid: prev && prev.lid != null ? prev.lid : (e.open ? 1 : 0),
+			open: !!e.open
+		}));
+	}
+	for (const id of [...poses.keys()]) {
+		if (id.startsWith("chest:") && !seen.has(id)) poses.delete(id);
+	}
+	stealChestVerts();
+}
 function ingestEntities(list, kind) {
+	if (kind === "chest") {
+		ingestChests(list);
+		return;
+	}
 	const now = performance.now();
 	const seen = new Set();
 	for (const e of list) {
@@ -325,7 +347,16 @@ function tickPoses(dt) {
 	const tntOut = [];
 	const framesOut = [];
 	const signsOut = [];
+	const chestsOut = [];
 	for (const st of poses.values()) {
+		if (st.kind === "chest") {
+			const target = st.open ? 1 : 0;
+			st.lid = st.lid || 0;
+			if (st.lid < target) st.lid = Math.min(target, st.lid + dt * 2);
+			else if (st.lid > target) st.lid = Math.max(target, st.lid - dt * 2);
+			chestsOut.push(st);
+			continue;
+		}
 		const t = st.dur ? Math.min(1, (now - st.t0) / st.dur) : 1;
 		const s = t * t * (3 - 2 * t);
 		const nx = lerp(st.from.x, st.to.x, s);
@@ -359,7 +390,7 @@ function tickPoses(dt) {
 		else if (st.kind === "frame") framesOut.push(st);
 		else if (st.kind === "sign") signsOut.push(st);
 	}
-	return { players: playersOut, mobs: mobsOut, tnt: tntOut, frames: framesOut, signs: signsOut };
+	return { players: playersOut, mobs: mobsOut, tnt: tntOut, frames: framesOut, signs: signsOut, chests: chestsOut };
 }
 
 function parseMesh(bytes) {
@@ -384,12 +415,14 @@ function parseMesh(bytes) {
 		for (let i = 0; i < floats; i++, o += 4) data[i] = view.getFloat32(o, true);
 	}
 	mesh = { data, count, tiles, vf };
+	chestGeom.clear();
 	if (pendingPatches.length) {
 		const queued = pendingPatches;
 		pendingPatches = [];
 		for (const patch of queued) parsePatch(patch);
 	} else {
 		refreshTerrain();
+		stealChestVerts();
 	}
 }
 
@@ -496,6 +529,116 @@ function punchPart(part, keys, vf) {
 		w += tri;
 	}
 	return { data: w === d.length ? d : d.subarray(0, w), count: w / vf };
+}
+
+function extractPart(part, keys, vf) {
+	if (!part || !part.data || !part.count) return new Float32Array(0);
+	const d = part.data;
+	const tri = vf * 3;
+	const taken = [];
+	let w = 0;
+	for (let i = 0; i < d.length; i += tri) {
+		const bx = Math.round(d[i + 9]);
+		const by = Math.round(d[i + 10]);
+		const bz = Math.round(d[i + 11]);
+		if (keys.has(bx + "," + by + "," + bz)) {
+			taken.push(d.slice(i, i + tri));
+			continue;
+		}
+		if (w !== i) d.copyWithin(w, i, i + tri);
+		w += tri;
+	}
+	part.data = w === d.length ? d : d.subarray(0, w);
+	part.count = w / vf;
+	if (!taken.length) return new Float32Array(0);
+	const out = new Float32Array(taken.length * tri);
+	for (let i = 0; i < taken.length; i++) out.set(taken[i], i * tri);
+	return out;
+}
+
+function stealChestVerts() {
+	if (!mesh || !mesh.parts) return;
+	const vf = mesh.vf || 9;
+	if (vf < 12) return;
+	const needed = new Set();
+	for (const st of poses.values()) {
+		if (st.kind === "chest") needed.add(st.x + "," + st.y + "," + st.z);
+	}
+	const missing = new Set();
+	for (const key of needed) {
+		if (!chestGeom.has(key)) missing.add(key);
+	}
+	if (missing.size) {
+		const chunks = [];
+		for (const name of ["opaque", "cutout", "trans"]) {
+			const got = extractPart(mesh.parts[name], missing, vf);
+			if (got.length) chunks.push(got);
+		}
+		if (chunks.length) {
+			const tri = vf * 3;
+			const buckets = new Map();
+			for (const chunk of chunks) {
+				for (let i = 0; i < chunk.length; i += tri) {
+					const key = Math.round(chunk[i + 9]) + "," + Math.round(chunk[i + 10]) + "," + Math.round(chunk[i + 11]);
+					if (!buckets.has(key)) buckets.set(key, []);
+					buckets.get(key).push(chunk.subarray(i, i + tri));
+				}
+			}
+			for (const [key, tris] of buckets) {
+				const data = new Float32Array(tris.length * tri);
+				for (let i = 0; i < tris.length; i++) data.set(tris[i], i * tri);
+				chestGeom.set(key, data);
+			}
+			terrainGen++;
+		}
+	}
+	let restored = false;
+	for (const key of [...chestGeom.keys()]) {
+		if (needed.has(key)) continue;
+		mesh.parts.opaque = concatPart(mesh.parts.opaque, chestGeom.get(key), vf);
+		chestGeom.delete(key);
+		restored = true;
+	}
+	if (restored) terrainGen++;
+}
+
+function chestLidPitch(p) {
+	p = Math.max(0, Math.min(1, p));
+	let g = 1 - p;
+	g = 1 - g * g * g;
+	return -g * Math.PI / 2;
+}
+
+function isChestLidVert(mx, my, mz) {
+	if (my > 10.4) return true;
+	if (my > 8.4 && my < 9.6) return true;
+	return mz > 14.4 && my > 6.4 && my < 8;
+}
+
+function transformChestGeom(src, ox, oy, oz, rotY, pitch, vf) {
+	const out = new Float32Array(src);
+	if (!pitch) return out;
+	const rad = -rotY * Math.PI / 180;
+	const cy = Math.cos(rad), sy = Math.sin(rad);
+	const icy = Math.cos(-rad), isy = Math.sin(-rad);
+	const cp = Math.cos(pitch), sp = Math.sin(pitch);
+	for (let i = 0; i < out.length; i += vf) {
+		const x0 = (out[i] - ox) * 16;
+		const y0 = (out[i + 1] - oy) * 16;
+		const z0 = (out[i + 2] - oz) * 16;
+		const lx = x0 - 8, lz = z0 - 8;
+		const mx = lx * icy + lz * isy + 8;
+		const mz = -lx * isy + lz * icy + 8;
+		if (!isChestLidVert(mx, y0, mz)) continue;
+		const ly = y0 - 9, lz2 = mz - 1;
+		const y1 = ly * cp - lz2 * sp + 9;
+		const z1 = ly * sp + lz2 * cp + 1;
+		const lx2 = mx - 8, lz3 = z1 - 8;
+		out[i] = ox + (lx2 * cy + lz3 * sy + 8) / 16;
+		out[i + 1] = oy + y1 / 16;
+		out[i + 2] = oz + (-lx2 * sy + lz3 * cy + 8) / 16;
+	}
+	return out;
 }
 
 function concatPart(part, extra, vf) {
@@ -607,6 +750,7 @@ function parsePatch(bytes) {
 		blocks.push({ x: view.getInt32(o, true), y: view.getInt32(o + 4, true), z: view.getInt32(o + 8, true) });
 		o += 12;
 	}
+	for (const b of blocks) chestGeom.delete(b.x + "," + b.y + "," + b.z);
 	punchBlocks(blocks);
 	const count = view.getInt32(o, true); o += 4;
 	const vf = mesh.vf || 9;
@@ -627,6 +771,7 @@ function parsePatch(bytes) {
 			mesh.parts.trans = concatPart(mesh.parts.trans, bins.trans, vf);
 		}
 		terrainGen++;
+		stealChestVerts();
 		return;
 	}
 	if (added && added.length) {
@@ -637,6 +782,7 @@ function parsePatch(bytes) {
 		mesh.count = merged.length / vf;
 	}
 	refreshTerrain();
+	stealChestVerts();
 }
 
 function spawnBurst(msg) {
@@ -3315,6 +3461,27 @@ function render() {
 			gl.disable(gl.BLEND);
 		}
 	}
+	if (mesh && sampled.chests && sampled.chests.length) {
+		const vf = mesh.vf || 12;
+		const chunks = [];
+		let n = 0;
+		for (const st of sampled.chests) {
+			const src = chestGeom.get(st.x + "," + st.y + "," + st.z);
+			if (!src) continue;
+			const pitched = transformChestGeom(src, st.x, st.y, st.z, st.rotY || 0, chestLidPitch(st.lid || 0), vf);
+			chunks.push(pitched);
+			n += pitched.length;
+		}
+		if (n) {
+			const all = new Float32Array(n);
+			let o = 0;
+			for (const c of chunks) {
+				all.set(c, o);
+				o += c.length;
+			}
+			draw(all, all.length / vf, mesh.tiles, hasAtlas, atlasTex, vf * 4, 0);
+		}
+	}
 	gl.enable(gl.CULL_FACE);
 	gl.frontFace(gl.CW);
 	const heldCubes = [];
@@ -3828,6 +3995,10 @@ function connect(cam) {
 	skyBufKey = "";
 	breaking = [];
 	particles = [];
+	for (const id of [...poses.keys()]) {
+		if (id.startsWith("chest:")) poses.delete(id);
+	}
+	chestGeom.clear();
 	if (socket) socket.close();
 	const proto = location.protocol === "https:" ? "wss" : "ws";
 	socket = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&camera=${cam.id}`);
@@ -3861,6 +4032,7 @@ function connect(cam) {
 				ingestEntities(msg.tnt || [], "tnt");
 				ingestEntities(msg.frames || [], "frame");
 				ingestEntities(msg.signs || [], "sign");
+				ingestEntities(msg.chests || [], "chest");
 				applySky(msg);
 			} else if (msg.type === "burst") {
 				spawnBurst(msg);
