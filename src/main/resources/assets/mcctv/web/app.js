@@ -173,6 +173,48 @@ fetch("/api/particle/spark_7.png").then(r => r.ok ? r : fetch("/api/particle/spa
 	sparkTex.ready = true;
 }).catch(() => { sparkTex.ready = false; });
 
+function glNearestTex() {
+	const tex = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_2D, tex);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	return tex;
+}
+function loadParticleSheet(prefix, count, cols, reverse) {
+	const rec = { tex: glNearestTex(), ready: false, cols, rows: Math.ceil(count / cols), count };
+	const grab = (name) => fetch("/api/particle/" + name + ".png").then(r => r.ok ? r.blob() : Promise.reject()).then(blob => createImageBitmap(blob));
+	const names = [];
+	for (let i = 0; i < count; i++) names.push(prefix + "_" + (reverse ? count - 1 - i : i));
+	Promise.all(names.map(grab)).then(imgs => {
+		if (!imgs || !imgs.length) throw new Error("no frames");
+		const w = imgs[0].width, h = imgs[0].height;
+		const sheet = document.createElement("canvas");
+		sheet.width = cols * w;
+		sheet.height = rec.rows * h;
+		const ctx2 = sheet.getContext("2d");
+		imgs.forEach((img, i) => ctx2.drawImage(img, (i % cols) * w, Math.floor(i / cols) * h));
+		gl.bindTexture(gl.TEXTURE_2D, rec.tex);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sheet);
+		rec.ready = true;
+	}).catch(() => { rec.ready = false; });
+	return rec;
+}
+function loadParticlePng(name, fallback) {
+	const rec = { tex: glNearestTex(), ready: false };
+	const grab = (key) => fetch("/api/particle/" + key + ".png").then(r => r.ok ? r.blob() : Promise.reject()).then(blob => createImageBitmap(blob));
+	grab(name).catch(() => fallback ? grab(fallback) : Promise.reject()).then(img => {
+		gl.bindTexture(gl.TEXTURE_2D, rec.tex);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+		rec.ready = true;
+	}).catch(() => { rec.ready = false; });
+	return rec;
+}
+const boomTex = loadParticleSheet("explosion", 16, 4);
+const poofTex = loadParticleSheet("generic", 8, 4, true);
+const flashTex = loadParticlePng("flash");
+
 function mat4() { return new Float32Array(16); }
 function identity(m) {
 	m.set([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
@@ -950,12 +992,124 @@ function spawnBurst(msg) {
 	}
 }
 
+function sheetUv(p, cols, rows, frames) {
+	const n = Math.max(1, frames || (cols * rows));
+	const f = Math.min(n - 1, Math.max(0, Math.floor((p.age / Math.max(p.life, 1e-4)) * n)));
+	const col = f % cols;
+	const row = Math.floor(f / cols);
+	p.u0 = col / cols;
+	p.v0 = row / rows;
+	p.u1 = (col + 1) / cols;
+	p.v1 = (row + 1) / rows;
+	p.tile = 0;
+}
+
+function spawnTntExplosion(msg) {
+	const x = msg.x;
+	const y = msg.y + 0.0625;
+	const z = msg.z;
+	for (let tick = 0; tick < 8; tick++) {
+		for (let i = 0; i < 6; i++) {
+			const gray = 0.4 + Math.random() * 0.6;
+			particles.push({
+				x: x + (Math.random() - Math.random()) * 4,
+				y: y + (Math.random() - Math.random()) * 4,
+				z: z + (Math.random() - Math.random()) * 4,
+				vx: 0, vy: 0, vz: 0,
+				life: (6 + Math.random() * 4) / 20,
+				age: 0,
+				delay: tick / 20,
+				floor: y - 40,
+				size: 2 * (1 - (tick / 8) * 0.5),
+				tile: 0,
+				u0: 0, v0: 0, u1: 0.25, v1: 0.25,
+				cr: gray, cg: gray, cb: gray,
+				boom: true,
+				grav: 0,
+				bounce: false,
+				drag: 1
+			});
+		}
+	}
+	particles.push({
+		x, y, z,
+		vx: 0, vy: 0, vz: 0,
+		life: 0.18,
+		age: 0,
+		floor: y - 40,
+		size: 3.2,
+		tile: 0,
+		u0: 0, v0: 0, u1: 1, v1: 1,
+		cr: 1, cg: 1, cb: 1,
+		flash: true,
+		grav: 0,
+		bounce: false,
+		drag: 1
+	});
+	const n = 52;
+	for (let i = 0; i < n; i++) {
+		let ox = Math.random() * 2 - 1;
+		let oy = Math.random() * 2 - 1;
+		let oz = Math.random() * 2 - 1;
+		const dist = Math.hypot(ox, oy, oz) || 1;
+		ox /= dist; oy /= dist; oz /= dist;
+		const reach = 0.6 + Math.random() * 3.4;
+		const t = (0.5 / (reach / 4 + 0.1)) * (Math.random() * Math.random() + 0.3);
+		const mx = x + ox * reach * 0.5;
+		const my = y + oy * reach * 0.5;
+		const mz = z + oz * reach * 0.5;
+		const vx = ox * t * 20;
+		const vy = oy * t * 20;
+		const vz = oz * t * 20;
+		const gray = 0.35 + Math.random() * 0.35;
+		particles.push({
+			x: mx, y: my, z: mz,
+			vx, vy, vz,
+			life: (8 + Math.random() * 12) / 20,
+			age: 0,
+			floor: y - 40,
+			size: 0.35 + Math.random() * 0.25,
+			tile: 0,
+			u0: 0, v0: 0, u1: 0.25, v1: 0.25,
+			cr: gray, cg: gray, cb: gray,
+			smoke: true,
+			grav: 1.2,
+			bounce: false,
+			drag: 0.96
+		});
+		if (i % 2 === 0) {
+			particles.push({
+				x: x + ox * reach,
+				y: y + oy * reach,
+				z: z + oz * reach,
+				vx: vx * 0.7, vy: vy * 0.7 + 0.8, vz: vz * 0.7,
+				life: (10 + Math.random() * 14) / 20,
+				age: 0,
+				floor: y - 40,
+				size: 0.22 + Math.random() * 0.18,
+				tile: 0,
+				u0: 0, v0: 0, u1: 0.25, v1: 0.25,
+				cr: gray * 0.85, cg: gray * 0.85, cb: gray * 0.85,
+				smoke: true,
+				grav: 0.6,
+				bounce: false,
+				drag: 0.94
+			});
+		}
+	}
+}
+
 function tickParticles(dt) {
 	if (!particles.length) return;
 	const next = [];
 	const defaultDrag = Math.pow(0.98, dt * 20);
 	const extra = [];
 	for (const p of particles) {
+		if ((p.delay || 0) > 0) {
+			p.delay -= dt;
+			next.push(p);
+			continue;
+		}
 		p.vy -= (p.grav != null ? p.grav : 16) * dt;
 		p.x += p.vx * dt;
 		p.y += p.vy * dt;
@@ -3939,19 +4093,58 @@ function render() {
 	if (particles.length) {
 		const pdata = [];
 		const sparks = [];
+		const booms = [];
+		const smokes = [];
+		const flashes = [];
 		const axes = cameraAxes();
 		const light = sceneLight();
 		for (const p of particles) {
-			drawParticle(p.spark ? sparks : pdata, p, p.size, axes, light);
+			if ((p.delay || 0) > 0) continue;
+			if (p.boom) {
+				sheetUv(p, 4, 4, 16);
+				drawParticle(booms, p, p.size, axes, 1);
+			} else if (p.flash) {
+				const fade = 1 - p.age / Math.max(p.life, 1e-4);
+				const old = [p.cr, p.cg, p.cb];
+				p.cr = p.cg = p.cb = fade;
+				drawParticle(flashes, p, p.size * (0.7 + 0.6 * fade), axes, 1);
+				p.cr = old[0]; p.cg = old[1]; p.cb = old[2];
+			} else if (p.smoke) {
+				sheetUv(p, 4, 2, 8);
+				drawParticle(smokes, p, p.size, axes, light);
+			} else if (p.spark) {
+				drawParticle(sparks, p, p.size, axes, light);
+			} else {
+				drawParticle(pdata, p, p.size, axes, light);
+			}
 		}
 		gl.depthMask(false);
 		if (pdata.length) {
 			draw(new Float32Array(pdata), pdata.length / 9, mesh ? mesh.tiles : 1, hasAtlas && mesh ? 1 : 0, atlasTex);
 		}
+		if (smokes.length) {
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			draw(new Float32Array(smokes), smokes.length / 9, 1, poofTex.ready ? 1 : 0, poofTex.ready ? poofTex.tex : atlasTex);
+			gl.disable(gl.BLEND);
+		}
 		if (sparks.length) {
 			gl.enable(gl.BLEND);
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 			draw(new Float32Array(sparks), sparks.length / 9, 1, sparkTex.ready ? 1 : 0, sparkTex.ready ? sparkTex.tex : atlasTex);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			gl.disable(gl.BLEND);
+		}
+		if (booms.length) {
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			draw(new Float32Array(booms), booms.length / 9, 1, boomTex.ready ? 1 : 0, boomTex.ready ? boomTex.tex : atlasTex);
+			gl.disable(gl.BLEND);
+		}
+		if (flashes.length) {
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+			draw(new Float32Array(flashes), flashes.length / 9, 1, flashTex.ready ? 1 : 0, flashTex.ready ? flashTex.tex : atlasTex);
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			gl.disable(gl.BLEND);
 		}
@@ -4213,7 +4406,12 @@ function connect(cam) {
 				ingestEntities(players, "player");
 				ingestEntities(mobs, "mob");
 				ingestEntities(items, "item");
-				ingestEntities(msg.tnt || [], "tnt");
+				const primed = [];
+				for (const cube of msg.tnt || []) {
+					if (cube.burst) spawnTntExplosion(cube);
+					else primed.push(cube);
+				}
+				ingestEntities(primed, "tnt");
 				const flying = [];
 				for (const rocket of msg.fireworks || []) {
 					if (rocket.burst) spawnFireworkBurst(rocket);
