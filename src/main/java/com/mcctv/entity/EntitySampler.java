@@ -475,23 +475,58 @@ public final class EntitySampler {
 		return json;
 	}
 
+	private static final Map<UUID, Map<UUID, JsonObject>> LAST_TNT = new HashMap<>();
+	private static final Map<UUID, Map<UUID, JsonObject>> LAST_ROCKETS = new HashMap<>();
+
 	private static JsonArray sampleTnt(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {
 		JsonArray tnt = new JsonArray();
+		JsonArray blasts = new JsonArray();
 		Box box = new Box(eye, eye).expand(range);
 		List<TntEntity> primed = world.getEntitiesByClass(TntEntity.class, box, entity -> inView(eye, look, entity.getX(), entity.getY() + 0.49, entity.getZ(), range));
+		Set<UUID> seen = new HashSet<>();
+		Map<UUID, JsonObject> lastForCam = LAST_TNT.computeIfAbsent(camera.id(), ignored -> new HashMap<>());
 		for (TntEntity entity : primed) {
-			JsonObject json = new JsonObject();
-			json.addProperty("uuid", entity.getUuidAsString());
-			json.addProperty("x", entity.getX());
-			json.addProperty("y", entity.getY());
-			json.addProperty("z", entity.getZ());
-			json.addProperty("fuse", entity.getFuse());
+			UUID id = entity.getUuid();
+			seen.add(id);
+			JsonObject json = tntJson(entity);
 			tnt.add(json);
+			lastForCam.put(id, json);
+		}
+		lastForCam.entrySet().removeIf(entry -> {
+			if (seen.contains(entry.getKey())) {
+				return false;
+			}
+			Entity still = world.getEntity(entry.getKey());
+			if (still != null && still.isAlive()) {
+				return false;
+			}
+			JsonObject last = entry.getValue();
+			double x = last.get("x").getAsDouble();
+			double y = last.get("y").getAsDouble();
+			double z = last.get("z").getAsDouble();
+			if (inView(eye, look, x, y, z, range + 8)) {
+				JsonObject blast = last.deepCopy();
+				blast.addProperty("burst", true);
+				blasts.add(blast);
+			}
+			return true;
+		});
+		for (var el : blasts) {
+			tnt.add(el);
 		}
 		return tnt;
 	}
 
-	private static final Map<UUID, Map<UUID, JsonObject>> LAST_ROCKETS = new HashMap<>();
+	private static JsonObject tntJson(TntEntity entity) {
+		JsonObject json = new JsonObject();
+		json.addProperty("uuid", entity.getUuidAsString());
+		json.addProperty("x", entity.getX());
+		json.addProperty("y", entity.getY());
+		json.addProperty("z", entity.getZ());
+		json.addProperty("fuse", entity.getFuse());
+		json.addProperty("power", 4);
+		return json;
+	}
 
 	private static JsonArray sampleFireworks(ServerWorld world, CameraRecord camera, Vec3d eye, Vec3d look, double range) {
 		JsonArray rockets = new JsonArray();
