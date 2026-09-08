@@ -140,10 +140,22 @@ public final class ChunkMesher {
 					seedCuboidTiles(book, name, 0, 0, 20, 40, 1);
 					seedCuboidTiles(book, name, 44, 0, 2, 42, 2);
 					seedCuboidTiles(book, name, 0, 42, 20, 2, 2);
+				} else if (name.equals("entity_camera") || name.equals("entity_steve")) {
+					seedSkullTiles(book, name);
 				}
 				continue;
 			}
 			tileIndex(book, new BlockAppearance.Face(name, 0xFFFFFF, false), 0x7F7F7F);
+		}
+	}
+
+	private static void seedSkullTiles(AtlasBook book, String name) {
+		String[] crops = {
+				"8,0,8,8", "16,0,8,8", "0,8,8,8", "8,8,8,8", "16,8,8,8", "24,8,8,8",
+				"40,0,8,8", "48,0,8,8", "32,8,8,8", "40,8,8,8", "48,8,8,8", "56,8,8,8"
+		};
+		for (String crop : crops) {
+			tileIndex(book, new BlockAppearance.Face(name + "@" + crop, 0xFFFFFF, false), 0x7F7F7F);
 		}
 	}
 
