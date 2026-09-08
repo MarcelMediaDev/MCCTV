@@ -1,11 +1,13 @@
 package com.mcctv.mesh;
 
 import com.mcctv.CctvConfig;
+import com.mcctv.camera.CameraItemFactory;
 import com.mcctv.camera.CameraRecord;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.MapColor;
 import net.minecraft.block.entity.BannerBlockEntity;
+import net.minecraft.block.entity.SkullBlockEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -210,6 +212,9 @@ public final class WorldSnapshot {
 				String extra = "layers=" + layers;
 				props = props.isEmpty() ? extra : props + "," + extra;
 			}
+		}
+		if (world.getBlockEntity(pos) instanceof SkullBlockEntity skull && CameraItemFactory.isCamera(skull.getOwner())) {
+			props = props.isEmpty() ? "camera=1" : props + ",camera=1";
 		}
 		return new Voxel(
 				false,

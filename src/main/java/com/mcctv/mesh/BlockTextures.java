@@ -326,6 +326,54 @@ public final class BlockTextures {
 		}
 	}
 
+	static boolean regionFlat(String name, String spec) {
+		ensureLoaded();
+		BufferedImage src = CACHE.get(name);
+		if (src == null || spec == null) {
+			return true;
+		}
+		String[] parts = spec.split(",");
+		if (parts.length < 4) {
+			return true;
+		}
+		try {
+			int u = Integer.parseInt(parts[0].trim());
+			int v = Integer.parseInt(parts[1].trim());
+			int w = Integer.parseInt(parts[2].trim());
+			int h = Integer.parseInt(parts[3].trim());
+			if (w < 0) {
+				u += w;
+				w = -w;
+			}
+			if (h < 0) {
+				v += h;
+				h = -h;
+			}
+			u = Math.max(0, Math.min(src.getWidth() - 1, u));
+			v = Math.max(0, Math.min(src.getHeight() - 1, v));
+			w = Math.max(1, Math.min(src.getWidth() - u, w));
+			h = Math.max(1, Math.min(src.getHeight() - v, h));
+			int min = 255;
+			int max = 0;
+			boolean any = false;
+			for (int yy = 0; yy < h; yy++) {
+				for (int xx = 0; xx < w; xx++) {
+					int p = src.getRGB(u + xx, v + yy);
+					if (((p >>> 24) & 0xFF) <= 16) {
+						continue;
+					}
+					any = true;
+					int lum = (((p >> 16) & 0xFF) + ((p >> 8) & 0xFF) + (p & 0xFF)) / 3;
+					min = Math.min(min, lum);
+					max = Math.max(max, lum);
+				}
+			}
+			return !any || max - min < 20;
+		} catch (Exception e) {
+			return true;
+		}
+	}
+
 	private static void clampPad(BufferedImage tile, int w, int h) {
 		w = Math.max(1, Math.min(16, w));
 		h = Math.max(1, Math.min(16, h));
@@ -404,6 +452,8 @@ public final class BlockTextures {
 		bundled += loadNamed(
 				"/assets/mcctv/vanilla/entity/banner_base.png",
 				"entity_banner_sheet");
+		bundled += loadNamed("/assets/mcctv/textures/entity/camera.png", "entity_camera");
+		bundled += loadNamed("/assets/mcctv/vanilla/steve.png", "entity_steve");
 		try {
 			ModContainer container = FabricLoader.getInstance().getModContainer("minecraft").orElse(null);
 			if (container != null) {
@@ -456,6 +506,8 @@ public final class BlockTextures {
 			loadSignDir(root.resolve("assets/minecraft/textures/entity/signs/hanging"), "entity_sign_hanging_");
 			loadPngFile(root.resolve("assets/minecraft/textures/entity/banner_base.png"), "entity_banner_sheet");
 			loadSignDir(root.resolve("assets/minecraft/textures/entity/banner"), "entity_banner_pattern_");
+			loadPngFile(root.resolve("assets/minecraft/textures/entity/player/wide/steve.png"), "entity_steve");
+			loadPngFile(root.resolve("assets/minecraft/textures/entity/steve.png"), "entity_steve");
 			return;
 		}
 		String name = root.toString();
@@ -502,6 +554,16 @@ public final class BlockTextures {
 							BufferedImage image = ImageIO.read(in);
 							if (image != null) {
 								CACHE.put("entity_banner_sheet", image);
+							}
+						} catch (IOException ignored) {
+						}
+					} else if ((path.equals("assets/minecraft/textures/entity/player/wide/steve.png")
+							|| path.equals("assets/minecraft/textures/entity/steve.png"))
+							&& !CACHE.containsKey("entity_steve")) {
+						try (InputStream in = zip.getInputStream(entry)) {
+							BufferedImage image = ImageIO.read(in);
+							if (image != null) {
+								CACHE.put("entity_steve", image);
 							}
 						} catch (IOException ignored) {
 						}

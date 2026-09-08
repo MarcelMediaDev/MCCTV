@@ -21,7 +21,14 @@ final class EntityBlockMeshes {
 		if (isSign(id)) {
 			return sign(id, props, extraY);
 		}
+		if (isSkull(id)) {
+			return skull(id, props, extraY);
+		}
 		return List.of();
+	}
+
+	private static boolean isSkull(String id) {
+		return "player_head".equals(id) || "player_wall_head".equals(id);
 	}
 
 	private static boolean isBanner(String id) {
@@ -309,6 +316,80 @@ final class EntityBlockMeshes {
 				c[2] = wall ? c[2] * SIGN_SCALE : (c[2] - 0.5f) * SIGN_SCALE + 0.5f;
 			}
 		}
+	}
+
+	private static List<BlockModels.BakedQuad> skull(String id, Map<String, String> props, int extraY) {
+		boolean camera = "1".equals(props.get("camera"));
+		String tex = camera ? "entity_camera" : "entity_steve";
+		if (!BlockTextures.has(tex)) {
+			tex = BlockTextures.has("entity_camera") ? "entity_camera" : "entity_steve";
+		}
+		boolean wall = "player_wall_head".equals(id);
+		float rotY = skullYaw(props, extraY, wall);
+		float y = wall ? 4 : 0;
+		List<BlockModels.BakedQuad> list = new ArrayList<>();
+		addSkullBox(list, 4, y, 4, 8, tex, 0, rotY, false);
+		addSkullBox(list, 3.5f, y - 0.5f, 3.5f, 9, tex, 32, rotY, true);
+		if (wall) {
+			nudgeSkullToWall(list, props.getOrDefault("facing", "north"));
+		}
+		return list;
+	}
+
+	private static void addSkullBox(List<BlockModels.BakedQuad> list, float x, float y, float z, float size,
+			String tex, int uOff, float rotY, boolean overlay) {
+		float x1 = x + size;
+		float y1 = y + size;
+		float z1 = z + size;
+		addSkullFace(list, "up", x, y, z, x1, y1, z1, tex, uv(uOff + 8, 0, 8, 8), rotY, overlay);
+		addSkullFace(list, "down", x, y, z, x1, y1, z1, tex, uv(uOff + 16, 0, 8, 8), rotY, overlay);
+		addSkullFace(list, "west", x, y, z, x1, y1, z1, tex, uv(uOff, 8, 8, 8), rotY, overlay);
+		addSkullFace(list, "south", x, y, z, x1, y1, z1, tex, uv(uOff + 8, 8, 8, 8), rotY, overlay);
+		addSkullFace(list, "east", x, y, z, x1, y1, z1, tex, uv(uOff + 16, 8, 8, 8), rotY, overlay);
+		addSkullFace(list, "north", x, y, z, x1, y1, z1, tex, uv(uOff + 24, 8, 8, 8), rotY, overlay);
+	}
+
+	private static void addSkullFace(List<BlockModels.BakedQuad> list, String dir, float x0, float y0, float z0,
+			float x1, float y1, float z1, String tex, String spec, float rotY, boolean overlay) {
+		if (BlockTextures.regionEmpty(tex, spec) || (overlay && BlockTextures.regionFlat(tex, spec))) {
+			return;
+		}
+		list.add(face(dir, x0, y0, z0, x1, y1, z1, tex, spec, rotY, 0f, true, false));
+	}
+
+	private static void nudgeSkullToWall(List<BlockModels.BakedQuad> list, String facing) {
+		float ox = 0;
+		float oz = 0;
+		switch (facing) {
+			case "south" -> oz = -0.25f;
+			case "north" -> oz = 0.25f;
+			case "east" -> ox = -0.25f;
+			default -> ox = 0.25f;
+		}
+		for (BlockModels.BakedQuad quad : list) {
+			for (float[] c : quad.corners()) {
+				c[0] += ox;
+				c[2] += oz;
+			}
+		}
+	}
+
+	private static float skullYaw(Map<String, String> props, int extraY, boolean wall) {
+		float look;
+		if (extraY != 0) {
+			look = extraY;
+		} else if (wall) {
+			look = yaw(0, props.get("facing"), false);
+		} else {
+			int rotation = 0;
+			try {
+				rotation = Integer.parseInt(props.getOrDefault("rotation", "0"));
+			} catch (NumberFormatException ignored) {
+				rotation = 0;
+			}
+			look = rotation * 22.5f;
+		}
+		return 180f - look;
 	}
 
 	private static String signWood(String id) {

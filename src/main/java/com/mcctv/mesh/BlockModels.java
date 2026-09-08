@@ -107,9 +107,12 @@ public final class BlockModels {
 	}
 
 	private static List<BakedQuad> bakeUncached(String id, Map<String, String> props, int pick) {
+		if ("player_head".equals(id) || "player_wall_head".equals(id)) {
+			return EntityBlockMeshes.quads(id, props, 0);
+		}
 		JsonObject blockstate = BLOCKSTATES.get(id);
 		if (blockstate == null) {
-			return List.of();
+			return EntityBlockMeshes.quads(id, props, 0);
 		}
 		List<ModelPose> poses = new ArrayList<>();
 		if (blockstate.has("multipart")) {
